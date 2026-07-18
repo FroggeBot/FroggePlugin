@@ -20,13 +20,14 @@ public sealed class Plugin : IDalamudPlugin
 
     public readonly WindowSystem WindowSystem = new("FroggePlugin");
     private MainWindow MainWindow { get; init; }
-    private FroggeApiClient ApiClient { get; init; }
+    internal FroggeApiClient ApiClient { get; init; }
 
     public Plugin()
     {
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
 
         ApiClient = new FroggeApiClient(Configuration);
+        ApiClient.SetAuthToken(Configuration.AuthToken);
 
         MainWindow = new MainWindow(this);
         WindowSystem.AddWindow(MainWindow);
