@@ -1,0 +1,12 @@
+{
+  "Author": "your name here",
+  "Name": "FroggePlugin",
+  "Punchline": "In-game companion for FroggeBot venue management.",
+  "Description": "View your VIP status, browse venue events, and more, without leaving the game. Companion client for the FroggeBot Discord bot.",
+  "ApplicableVersion": "any",
+  "Tags": [
+    "frogge",
+    "venue",
+    "roleplay"
+  ]
+}

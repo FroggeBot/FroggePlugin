@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+  <PropertyGroup>
+    <Version>0.0.0.1</Version>
+    <Description>In-game companion for FroggeBot venue management.</Description>
+    <PackageProjectUrl>https://github.com/FroggeBot/FroggePlugin</PackageProjectUrl>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+</Project>
