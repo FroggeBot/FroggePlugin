@@ -8,7 +8,7 @@ using FroggePlugin.Api;
 
 namespace FroggePlugin.Windows;
 
-public class MainWindow : Window, IDisposable
+public partial class MainWindow : Window, IDisposable
 {
     private enum LinkState
     {
@@ -23,6 +23,15 @@ public class MainWindow : Window, IDisposable
         VipStatus,
         VipHistory,
         VipPerks,
+        Events,
+        EventList,
+        EventDetail,
+        Profiles,
+        ProfileDetail,
+        Giveaways,
+        GiveawayList,
+        Raffles,
+        RaffleList,
     }
 
     private enum VipLoadState
@@ -32,6 +41,8 @@ public class MainWindow : Window, IDisposable
         Loaded,
         Error,
     }
+
+    // --- State ---------------------------------------------------------------------------
 
     private readonly Plugin plugin;
 
@@ -44,24 +55,14 @@ public class MainWindow : Window, IDisposable
     private PluginTokenRedeemed? pendingResult;
 
     private Page page = Page.Home;
-    private VipLoadState vipLoadState = VipLoadState.Idle;
-    private string? vipErrorMessage;
 
-    // Read-only display data - unlike pendingResult above, nothing here is ever copied onto
-    // Configuration/HttpClient, so the background fetch task can set it directly.
-    private List<PluginVipMembership>? vipMemberships;
-
-    // Which venue History/Perks was opened for - set when a venue card's button is clicked.
-    private ulong selectedGuildId;
-    private string selectedGuildName = string.Empty;
-
-    private VipLoadState historyLoadState = VipLoadState.Idle;
-    private string? historyErrorMessage;
-    private List<PluginVipHistoryPeriod>? vipHistory;
-
-    private VipLoadState perksLoadState = VipLoadState.Idle;
-    private string? perksErrorMessage;
-    private List<PluginVipPerkStatus>? vipPerks;
+    // Generic guild picker, backed by the shared /plugin/guilds endpoint - shared across every
+    // feature that needs a "which venue?" step (Giveaways and Raffles so far) rather than
+    // redeclared per-feature, since guild membership itself has nothing to do with which
+    // feature is asking.
+    private VipLoadState guildsLoadState = VipLoadState.Idle;
+    private string? guildsErrorMessage;
+    private List<PluginGuild>? guilds;
 
     public MainWindow(Plugin plugin) : base("FroggePlugin##MainWindow")
     {
@@ -89,28 +90,42 @@ public class MainWindow : Window, IDisposable
             state = LinkState.Idle;
         }
 
-        ImGui.Text("FroggePlugin");
+        DrawTitle("FroggePlugin");
         ImGui.Separator();
+        ImGui.Spacing();
 
         if (plugin.Configuration.AuthToken is null)
         {
             DrawUnlinked();
         }
-        else if (page == Page.VipStatus)
+        else switch (page)
         {
-            DrawVipStatus();
-        }
-        else if (page == Page.VipHistory)
-        {
-            DrawVipHistory();
-        }
-        else if (page == Page.VipPerks)
-        {
-            DrawVipPerks();
-        }
-        else
-        {
-            DrawHome();
+            case Page.VipStatus:
+                DrawVipStatus(); break;
+            case Page.VipHistory:
+                DrawVipHistory(); break;
+            case Page.VipPerks:
+                DrawVipPerks(); break;
+            case Page.Events:
+                DrawEvents(); break;
+            case Page.EventList:
+                DrawEventList(); break;
+            case Page.EventDetail:
+                DrawEventDetail(); break;
+            case Page.Profiles:
+                DrawProfiles(); break;
+            case Page.ProfileDetail:
+                DrawProfileDetail(); break;
+            case Page.Giveaways:
+                DrawGiveaways(); break;
+            case Page.GiveawayList:
+                DrawGiveawayList(); break;
+            case Page.Raffles:
+                DrawRaffles(); break;
+            case Page.RaffleList:
+                DrawRaffleList(); break;
+            default:
+                DrawHome(); break;
         }
     }
 
@@ -119,14 +134,34 @@ public class MainWindow : Window, IDisposable
         var label = plugin.Configuration.LinkedDiscordUsername
             ?? plugin.Configuration.LinkedDiscordUserId?.ToString()
             ?? "Unknown";
-        ImGui.TextWrapped($"Linked as {label}");
+        ImGui.TextDisabled($"Linked as {label}");
+        ImGui.Spacing();
+        ImGui.Spacing();
 
-        if (ImGui.Button("VIP Status"))
-        {
+        if (ColoredButton("VIP Status", AccentColor, FullWidthButton))
             StartVipStatus();
-        }
+        ImGui.Spacing();
 
-        if (ImGui.Button("Forget"))
+        if (ColoredButton("Events", AccentColor, FullWidthButton))
+            StartEvents();
+        ImGui.Spacing();
+
+        if (ColoredButton("Profiles", AccentColor, FullWidthButton))
+            StartProfiles();
+        ImGui.Spacing();
+
+        if (ColoredButton("Giveaways", AccentColor, FullWidthButton))
+            StartGiveaways();
+        ImGui.Spacing();
+
+        if (ColoredButton("Raffles", AccentColor, FullWidthButton))
+            StartRaffles();
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        if (ColoredButton("Forget", DangerColor, FullWidthButton))
         {
             plugin.Configuration.AuthToken = null;
             plugin.Configuration.LinkedDiscordUserId = null;
@@ -140,279 +175,27 @@ public class MainWindow : Window, IDisposable
         }
     }
 
-    private void DrawVipStatus()
-    {
-        if (ImGui.Button("Back"))
-        {
-            page = Page.Home;
-            vipLoadState = VipLoadState.Idle;
-            vipMemberships = null;
-            vipErrorMessage = null;
-            return;
-        }
-
-        ImGui.Separator();
-
-        switch (vipLoadState)
-        {
-            case VipLoadState.Loading:
-                ImGui.TextWrapped("Loading...");
-                break;
-
-            case VipLoadState.Error:
-                ImGui.TextWrapped(vipErrorMessage ?? "Something went wrong.");
-                if (ImGui.Button("Retry"))
-                {
-                    StartVipStatus();
-                }
-                break;
-
-            case VipLoadState.Loaded:
-                if (vipMemberships is null || vipMemberships.Count == 0)
-                {
-                    ImGui.TextWrapped("You're not a VIP anywhere yet.");
-                    break;
-                }
-
-                foreach (var membership in vipMemberships)
-                {
-                    ImGui.Text(membership.GuildName);
-                    ImGui.TextWrapped($"Tier: {membership.TierName}");
-                    ImGui.TextWrapped(
-                        membership.ExpiresAt is { } expiresAt
-                            ? $"Expires: {expiresAt.LocalDateTime:d}"
-                            : "Expires: Never"
-                    );
-
-                    if (ImGui.Button($"History##{membership.GuildId}"))
-                    {
-                        StartVipHistory(membership.GuildId, membership.GuildName);
-                    }
-                    ImGui.SameLine();
-                    if (ImGui.Button($"Perks##{membership.GuildId}"))
-                    {
-                        StartVipPerks(membership.GuildId, membership.GuildName);
-                    }
-
-                    ImGui.Separator();
-                }
-                break;
-        }
-    }
-
-    private void StartVipStatus()
-    {
-        page = Page.VipStatus;
-        vipLoadState = VipLoadState.Loading;
-        vipErrorMessage = null;
-        _ = FetchVipStatusAsync();
-    }
-
-    private async Task FetchVipStatusAsync()
-    {
-        try
-        {
-            var result = await plugin.ApiClient.GetVipMembershipsAsync();
-            if (result is null)
-            {
-                vipErrorMessage = "Couldn't load VIP status.";
-                vipLoadState = VipLoadState.Error;
-                return;
-            }
-
-            vipMemberships = result;
-            vipLoadState = VipLoadState.Loaded;
-        }
-        catch (Exception ex)
-        {
-            vipErrorMessage = $"Couldn't load VIP status: {ex.Message}";
-            vipLoadState = VipLoadState.Error;
-        }
-    }
-
-    private void DrawVipHistory()
-    {
-        if (ImGui.Button("Back"))
-        {
-            page = Page.VipStatus;
-            historyLoadState = VipLoadState.Idle;
-            vipHistory = null;
-            historyErrorMessage = null;
-            return;
-        }
-
-        ImGui.Separator();
-        ImGui.Text($"{selectedGuildName} - History");
-
-        switch (historyLoadState)
-        {
-            case VipLoadState.Loading:
-                ImGui.TextWrapped("Loading...");
-                break;
-
-            case VipLoadState.Error:
-                ImGui.TextWrapped(historyErrorMessage ?? "Something went wrong.");
-                if (ImGui.Button("Retry"))
-                {
-                    StartVipHistory(selectedGuildId, selectedGuildName);
-                }
-                break;
-
-            case VipLoadState.Loaded:
-                if (vipHistory is null || vipHistory.Count == 0)
-                {
-                    ImGui.TextWrapped("No membership history yet.");
-                    break;
-                }
-
-                foreach (var period in vipHistory)
-                {
-                    ImGui.Text($"Tier: {period.TierName}");
-                    ImGui.TextWrapped($"Started: {period.StartedAt.LocalDateTime:d}");
-                    ImGui.TextWrapped(
-                        period.EndedAt is { } endedAt
-                            ? $"Ended: {endedAt.LocalDateTime:d}"
-                            : "Ended: Current"
-                    );
-                    if (period.EndedReason is not null)
-                    {
-                        ImGui.TextWrapped($"Reason: {period.EndedReason}");
-                    }
-                    ImGui.Separator();
-                }
-                break;
-        }
-    }
-
-    private void StartVipHistory(ulong guildId, string guildName)
-    {
-        page = Page.VipHistory;
-        selectedGuildId = guildId;
-        selectedGuildName = guildName;
-        historyLoadState = VipLoadState.Loading;
-        historyErrorMessage = null;
-        _ = FetchVipHistoryAsync(guildId);
-    }
-
-    private async Task FetchVipHistoryAsync(ulong guildId)
-    {
-        try
-        {
-            var result = await plugin.ApiClient.GetVipHistoryAsync(guildId);
-            if (result is null)
-            {
-                historyErrorMessage = "Couldn't load VIP history.";
-                historyLoadState = VipLoadState.Error;
-                return;
-            }
-
-            vipHistory = result;
-            historyLoadState = VipLoadState.Loaded;
-        }
-        catch (Exception ex)
-        {
-            historyErrorMessage = $"Couldn't load VIP history: {ex.Message}";
-            historyLoadState = VipLoadState.Error;
-        }
-    }
-
-    private void DrawVipPerks()
-    {
-        if (ImGui.Button("Back"))
-        {
-            page = Page.VipStatus;
-            perksLoadState = VipLoadState.Idle;
-            vipPerks = null;
-            perksErrorMessage = null;
-            return;
-        }
-
-        ImGui.Separator();
-        ImGui.Text($"{selectedGuildName} - Perks");
-
-        switch (perksLoadState)
-        {
-            case VipLoadState.Loading:
-                ImGui.TextWrapped("Loading...");
-                break;
-
-            case VipLoadState.Error:
-                ImGui.TextWrapped(perksErrorMessage ?? "Something went wrong.");
-                if (ImGui.Button("Retry"))
-                {
-                    StartVipPerks(selectedGuildId, selectedGuildName);
-                }
-                break;
-
-            case VipLoadState.Loaded:
-                if (vipPerks is null || vipPerks.Count == 0)
-                {
-                    ImGui.TextWrapped("No perks for your current tier.");
-                    break;
-                }
-
-                foreach (var perk in vipPerks)
-                {
-                    ImGui.TextWrapped($"{perk.Text} - {perk.RedemptionStatus}");
-                }
-                break;
-        }
-    }
-
-    private void StartVipPerks(ulong guildId, string guildName)
-    {
-        page = Page.VipPerks;
-        selectedGuildId = guildId;
-        selectedGuildName = guildName;
-        perksLoadState = VipLoadState.Loading;
-        perksErrorMessage = null;
-        _ = FetchVipPerksAsync(guildId);
-    }
-
-    private async Task FetchVipPerksAsync(ulong guildId)
-    {
-        try
-        {
-            var result = await plugin.ApiClient.GetVipPerksAsync(guildId);
-            if (result is null)
-            {
-                perksErrorMessage = "Couldn't load VIP perks.";
-                perksLoadState = VipLoadState.Error;
-                return;
-            }
-
-            vipPerks = result;
-            perksLoadState = VipLoadState.Loaded;
-        }
-        catch (Exception ex)
-        {
-            perksErrorMessage = $"Couldn't load VIP perks: {ex.Message}";
-            perksLoadState = VipLoadState.Error;
-        }
-    }
-
     private void DrawUnlinked()
     {
         ImGui.TextWrapped("Run /plugin-link in Discord, then enter the code below.");
+        ImGui.Spacing();
 
-        ImGui.InputText("Code", ref codeInput, 16);
+        ImGui.SetNextItemWidth(-1);
+        ImGui.InputText("##Code", ref codeInput, 16);
+        ImGui.Spacing();
 
         var inProgress = state == LinkState.InProgress;
         ImGui.BeginDisabled(inProgress);
-        if (ImGui.Button("Link"))
-        {
-            StartLink();
-        }
+        var linked = ColoredButton("Link", AccentColor, FullWidthButton);
         ImGui.EndDisabled();
+        if (linked)
+            StartLink();
 
+        ImGui.Spacing();
         if (inProgress)
-        {
-            ImGui.TextWrapped("Linking...");
-        }
+            ImGui.TextDisabled("Linking...");
         else if (state == LinkState.Error && errorMessage is not null)
-        {
-            ImGui.TextWrapped(errorMessage);
-        }
+            DrawColored(errorMessage, DangerColor);
     }
 
     private void StartLink()

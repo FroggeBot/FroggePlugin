@@ -18,6 +18,83 @@ public sealed record PluginVipHistoryPeriod(string TierName, DateTimeOffset Star
 
 public sealed record PluginVipPerkStatus(string Text, string RedemptionStatus);
 
+public sealed record PluginEventGuild(ulong GuildId, string GuildName);
+
+public sealed record PluginEventSummary(int Id, ulong GuildId, string Name, string? Description, DateTimeOffset StartAt, DateTimeOffset? EndAt, string? ImageUrl);
+
+public sealed record PluginShiftDetail(int Id, DateTimeOffset StartAt, DateTimeOffset EndAt, int Capacity, int SignupCount, bool IsSignedUp, bool IsLocked);
+
+public sealed record PluginPositionDetail(string PositionName, List<PluginShiftDetail> Shifts);
+
+public sealed record PluginEventDetail(int Id, ulong GuildId, string Name, string? Description, DateTimeOffset StartAt, DateTimeOffset? EndAt, string? ImageUrl, List<PluginPositionDetail> Positions);
+
+public sealed record PluginGuild(ulong GuildId, string GuildName);
+
+public sealed record PluginGiveawaySummary(
+    int Id,
+    ulong GuildId,
+    string? Name,
+    string? Prize,
+    DateTimeOffset? EndAt,
+    int EntrantCount,
+    bool IsEntered,
+    bool IsRolled,
+    DateTimeOffset? RolledAt,
+    bool IsWinner,
+    int WinnerCount,
+    string? DiscordLink
+);
+
+public sealed record PluginRaffleSummary(
+    int Id,
+    ulong GuildId,
+    string? Name,
+    int CostPerTicket,
+    int WinnerPct,
+    int EntrantCount,
+    int TotalTickets,
+    int MyTicketCount,
+    bool IsRolled,
+    DateTimeOffset? RolledAt,
+    bool IsWinner,
+    int WinnerCount,
+    string? DiscordLink
+);
+
+public sealed record PluginProfileSummary(int Id, ulong GuildId, string GuildName, string CharacterName, bool IsPrimary, string ApprovalStatus, string? ThumbnailUrl);
+
+public sealed record PluginProfileImage(string ImageUrl, string? Caption);
+
+public sealed record PluginProfileDetail(
+    int Id,
+    ulong GuildId,
+    string GuildName,
+    string CharacterName,
+    bool IsPrimary,
+    string ApprovalStatus,
+    string? RejectionReason,
+    int? Color,
+    string? Jobs,
+    string? Rates,
+    string? ThumbnailUrl,
+    string? MainImageUrl,
+    string? World,
+    string? DataCenter,
+    string? Gender,
+    string? Pronouns,
+    string? Race,
+    string? Clan,
+    string? Orientation,
+    string? Height,
+    string? Age,
+    string? MareCode,
+    string? Likes,
+    string? Dislikes,
+    string? Personality,
+    string? AboutMe,
+    List<PluginProfileImage> AdditionalImages
+);
+
 public sealed class FroggeApiClient : IDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -96,6 +173,118 @@ public sealed class FroggeApiClient : IDisposable
             return null;
         }
         return await response.Content.ReadFromJsonAsync<List<PluginVipPerkStatus>>(JsonOptions);
+    }
+
+    public async Task<List<PluginEventGuild>?> GetEventGuildsAsync()
+    {
+        using var response = await httpClient.GetAsync("/plugin/events/guilds");
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+        return await response.Content.ReadFromJsonAsync<List<PluginEventGuild>>(JsonOptions);
+    }
+
+    public async Task<List<PluginEventSummary>?> GetUpcomingEventsAsync(ulong guildId)
+    {
+        using var response = await httpClient.GetAsync($"/plugin/events?guild_id={guildId}");
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+        return await response.Content.ReadFromJsonAsync<List<PluginEventSummary>>(JsonOptions);
+    }
+
+    public async Task<PluginEventDetail?> GetEventDetailAsync(ulong guildId, int eventId)
+    {
+        using var response = await httpClient.GetAsync($"/plugin/events/{eventId}?guild_id={guildId}");
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+        return await response.Content.ReadFromJsonAsync<PluginEventDetail>(JsonOptions);
+    }
+
+    public async Task<bool> SignupForShiftAsync(ulong guildId, int shiftId)
+    {
+        using var response = await httpClient.PostAsync($"/plugin/events/shifts/{shiftId}/signup?guild_id={guildId}", null);
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<bool> LeaveShiftAsync(ulong guildId, int shiftId)
+    {
+        using var response = await httpClient.DeleteAsync($"/plugin/events/shifts/{shiftId}/signup?guild_id={guildId}");
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<List<PluginGuild>?> GetGuildsAsync()
+    {
+        using var response = await httpClient.GetAsync("/plugin/guilds");
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+        return await response.Content.ReadFromJsonAsync<List<PluginGuild>>(JsonOptions);
+    }
+
+    public async Task<List<PluginGiveawaySummary>?> GetOpenGiveawaysAsync(ulong guildId)
+    {
+        using var response = await httpClient.GetAsync($"/plugin/giveaways?guild_id={guildId}");
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+        return await response.Content.ReadFromJsonAsync<List<PluginGiveawaySummary>>(JsonOptions);
+    }
+
+    public async Task<List<PluginGiveawaySummary>?> GetConcludedGiveawaysAsync(ulong guildId)
+    {
+        using var response = await httpClient.GetAsync($"/plugin/giveaways/concluded?guild_id={guildId}");
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+        return await response.Content.ReadFromJsonAsync<List<PluginGiveawaySummary>>(JsonOptions);
+    }
+
+    public async Task<List<PluginRaffleSummary>?> GetOpenRafflesAsync(ulong guildId)
+    {
+        using var response = await httpClient.GetAsync($"/plugin/raffles?guild_id={guildId}");
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+        return await response.Content.ReadFromJsonAsync<List<PluginRaffleSummary>>(JsonOptions);
+    }
+
+    public async Task<List<PluginRaffleSummary>?> GetConcludedRafflesAsync(ulong guildId)
+    {
+        using var response = await httpClient.GetAsync($"/plugin/raffles/concluded?guild_id={guildId}");
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+        return await response.Content.ReadFromJsonAsync<List<PluginRaffleSummary>>(JsonOptions);
+    }
+
+    public async Task<List<PluginProfileSummary>?> GetProfilesAsync()
+    {
+        using var response = await httpClient.GetAsync("/plugin/profiles");
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+        return await response.Content.ReadFromJsonAsync<List<PluginProfileSummary>>(JsonOptions);
+    }
+
+    public async Task<PluginProfileDetail?> GetProfileDetailAsync(int characterId)
+    {
+        using var response = await httpClient.GetAsync($"/plugin/profiles/{characterId}");
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+        return await response.Content.ReadFromJsonAsync<PluginProfileDetail>(JsonOptions);
     }
 
     public async Task<bool> RevokeAsync()
