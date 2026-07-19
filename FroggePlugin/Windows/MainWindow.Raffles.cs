@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Dalamud.Bindings.ImGui;
-using Dalamud.Utility;
 using FroggePlugin.Api;
 
 namespace FroggePlugin.Windows;
@@ -18,46 +17,7 @@ public partial class MainWindow
     private string? raffleListErrorMessage;
     private List<PluginRaffleSummary>? raffles;
 
-    private void DrawRaffles()
-    {
-        if (DrawBackButton())
-        {
-            page = Page.Home;
-            guildsLoadState = VipLoadState.Idle;
-            guilds = null;
-            guildsErrorMessage = null;
-            return;
-        }
-
-        ImGui.Separator();
-        ImGui.Spacing();
-
-        switch (guildsLoadState)
-        {
-            case VipLoadState.Loading:
-                DrawLoading();
-                break;
-
-            case VipLoadState.Error:
-                DrawError(guildsErrorMessage, StartRaffles);
-                break;
-
-            case VipLoadState.Loaded:
-                if (guilds is null || guilds.Count == 0)
-                {
-                    DrawEmpty("No linked venues yet. Run /plugin-link again if you've joined a new one.");
-                    break;
-                }
-
-                foreach (var guild in guilds)
-                {
-                    if (ColoredButton($"{guild.GuildName}##{guild.GuildId}", AccentColor, FullWidthButton))
-                        StartRaffleList(guild.GuildId, guild.GuildName);
-                    ImGui.Spacing();
-                }
-                break;
-        }
-    }
+    private void DrawRaffles() => DrawGuildPicker(StartRaffles, StartRaffleList);
 
     private void StartRaffles()
     {
@@ -145,7 +105,7 @@ public partial class MainWindow
                     {
                         ImGui.Spacing();
                         if (ImGui.Button($"View in Discord##{raffle.Id}"))
-                            Util.OpenLink(link);
+                            OpenDiscordLink(link);
                     }
 
                     EndCard(AccentColor);
@@ -170,27 +130,11 @@ public partial class MainWindow
         _ = FetchRafflesAsync();
     }
 
-    private async Task FetchRafflesAsync()
-    {
-        try
-        {
-            var result = showConcludedRaffles
-                ? await plugin.ApiClient.GetConcludedRafflesAsync(selectedRaffleGuildId)
-                : await plugin.ApiClient.GetOpenRafflesAsync(selectedRaffleGuildId);
-            if (result is null)
-            {
-                raffleListErrorMessage = "Couldn't load raffles.";
-                raffleListLoadState = VipLoadState.Error;
-                return;
-            }
-
-            raffles = result;
-            raffleListLoadState = VipLoadState.Loaded;
-        }
-        catch (Exception ex)
-        {
-            raffleListErrorMessage = $"Couldn't load raffles: {ex.Message}";
-            raffleListLoadState = VipLoadState.Error;
-        }
-    }
+    private Task FetchRafflesAsync() => LoadAsync(
+        () => showConcludedRaffles
+            ? plugin.ApiClient.GetConcludedRafflesAsync(selectedRaffleGuildId)
+            : plugin.ApiClient.GetOpenRafflesAsync(selectedRaffleGuildId),
+        result => raffles = result,
+        (loadState, err) => { raffleListLoadState = loadState; if (err != null) raffleListErrorMessage = err; },
+        "Couldn't load raffles");
 }

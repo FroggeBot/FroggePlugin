@@ -90,27 +90,11 @@ public partial class MainWindow
         _ = FetchVipStatusAsync();
     }
 
-    private async Task FetchVipStatusAsync()
-    {
-        try
-        {
-            var result = await plugin.ApiClient.GetVipMembershipsAsync();
-            if (result is null)
-            {
-                vipErrorMessage = "Couldn't load VIP status.";
-                vipLoadState = VipLoadState.Error;
-                return;
-            }
-
-            vipMemberships = result;
-            vipLoadState = VipLoadState.Loaded;
-        }
-        catch (Exception ex)
-        {
-            vipErrorMessage = $"Couldn't load VIP status: {ex.Message}";
-            vipLoadState = VipLoadState.Error;
-        }
-    }
+    private Task FetchVipStatusAsync() => LoadAsync(
+        plugin.ApiClient.GetVipMembershipsAsync,
+        result => vipMemberships = result,
+        (loadState, err) => { vipLoadState = loadState; if (err != null) vipErrorMessage = err; },
+        "Couldn't load VIP status");
 
     private void DrawVipHistory()
     {
@@ -173,27 +157,11 @@ public partial class MainWindow
         _ = FetchVipHistoryAsync(guildId);
     }
 
-    private async Task FetchVipHistoryAsync(ulong guildId)
-    {
-        try
-        {
-            var result = await plugin.ApiClient.GetVipHistoryAsync(guildId);
-            if (result is null)
-            {
-                historyErrorMessage = "Couldn't load VIP history.";
-                historyLoadState = VipLoadState.Error;
-                return;
-            }
-
-            vipHistory = result;
-            historyLoadState = VipLoadState.Loaded;
-        }
-        catch (Exception ex)
-        {
-            historyErrorMessage = $"Couldn't load VIP history: {ex.Message}";
-            historyLoadState = VipLoadState.Error;
-        }
-    }
+    private Task FetchVipHistoryAsync(ulong guildId) => LoadAsync(
+        () => plugin.ApiClient.GetVipHistoryAsync(guildId),
+        result => vipHistory = result,
+        (loadState, err) => { historyLoadState = loadState; if (err != null) historyErrorMessage = err; },
+        "Couldn't load VIP history");
 
     private void DrawVipPerks()
     {
@@ -257,25 +225,9 @@ public partial class MainWindow
         _ = FetchVipPerksAsync(guildId);
     }
 
-    private async Task FetchVipPerksAsync(ulong guildId)
-    {
-        try
-        {
-            var result = await plugin.ApiClient.GetVipPerksAsync(guildId);
-            if (result is null)
-            {
-                perksErrorMessage = "Couldn't load VIP perks.";
-                perksLoadState = VipLoadState.Error;
-                return;
-            }
-
-            vipPerks = result;
-            perksLoadState = VipLoadState.Loaded;
-        }
-        catch (Exception ex)
-        {
-            perksErrorMessage = $"Couldn't load VIP perks: {ex.Message}";
-            perksLoadState = VipLoadState.Error;
-        }
-    }
+    private Task FetchVipPerksAsync(ulong guildId) => LoadAsync(
+        () => plugin.ApiClient.GetVipPerksAsync(guildId),
+        result => vipPerks = result,
+        (loadState, err) => { perksLoadState = loadState; if (err != null) perksErrorMessage = err; },
+        "Couldn't load VIP perks");
 }

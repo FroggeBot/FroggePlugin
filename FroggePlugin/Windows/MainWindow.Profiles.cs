@@ -79,27 +79,11 @@ public partial class MainWindow
         _ = FetchProfilesAsync();
     }
 
-    private async Task FetchProfilesAsync()
-    {
-        try
-        {
-            var result = await plugin.ApiClient.GetProfilesAsync();
-            if (result is null)
-            {
-                profilesErrorMessage = "Couldn't load characters.";
-                profilesLoadState = VipLoadState.Error;
-                return;
-            }
-
-            profiles = result;
-            profilesLoadState = VipLoadState.Loaded;
-        }
-        catch (Exception ex)
-        {
-            profilesErrorMessage = $"Couldn't load characters: {ex.Message}";
-            profilesLoadState = VipLoadState.Error;
-        }
-    }
+    private Task FetchProfilesAsync() => LoadAsync(
+        plugin.ApiClient.GetProfilesAsync,
+        result => profiles = result,
+        (loadState, err) => { profilesLoadState = loadState; if (err != null) profilesErrorMessage = err; },
+        "Couldn't load characters");
 
     private void DrawProfileDetail()
     {
@@ -130,81 +114,9 @@ public partial class MainWindow
                     break;
 
                 var p = profileDetail;
-                var statusColor = ApprovalStatusColor(p.ApprovalStatus);
-
                 BeginCard();
-
-                DrawTitle(p.CharacterName);
-                if (p.IsPrimary)
-                {
-                    ImGui.SameLine();
-                    DrawBadge("Primary", AccentColor);
-                }
-                ImGui.SameLine();
-                DrawBadge(p.ApprovalStatus, statusColor);
-                ImGui.TextDisabled(p.GuildName);
-                if (p.RejectionReason is not null)
-                {
-                    ImGui.Spacing();
-                    DrawColored($"Rejection reason: {p.RejectionReason}", DangerColor);
-                }
-
-                var hasMainInfo = !string.IsNullOrEmpty(p.Jobs) || !string.IsNullOrEmpty(p.Rates);
-                if (hasMainInfo)
-                {
-                    DrawSectionHeader("Main Info");
-                    if (ImGui.BeginTable("##maininfo", 2, ImGuiTableFlags.SizingStretchSame))
-                    {
-                        DrawFieldRow("Jobs", p.Jobs, "Rates", p.Rates);
-                        ImGui.EndTable();
-                    }
-                }
-
-                var hasGlance = !string.IsNullOrEmpty(p.Race) || !string.IsNullOrEmpty(p.Clan)
-                    || !string.IsNullOrEmpty(p.Gender) || !string.IsNullOrEmpty(p.Pronouns)
-                    || !string.IsNullOrEmpty(p.Orientation) || !string.IsNullOrEmpty(p.World)
-                    || !string.IsNullOrEmpty(p.DataCenter) || !string.IsNullOrEmpty(p.Height)
-                    || !string.IsNullOrEmpty(p.Age) || !string.IsNullOrEmpty(p.MareCode);
-                if (hasGlance)
-                {
-                    DrawSectionHeader("At A Glance");
-                    if (ImGui.BeginTable("##glance", 2, ImGuiTableFlags.SizingStretchSame))
-                    {
-                        DrawFieldRow("Race", p.Race, "Clan", p.Clan);
-                        DrawFieldRow("Gender", p.Gender, "Pronouns", p.Pronouns);
-                        DrawFieldRow("Orientation", p.Orientation, "World", p.World);
-                        DrawFieldRow("Data Center", p.DataCenter, "Height", p.Height);
-                        DrawFieldRow("Age", p.Age, "Mare Code", p.MareCode);
-                        ImGui.EndTable();
-                    }
-                }
-
-                var hasNarrativeFields = !string.IsNullOrEmpty(p.Likes) || !string.IsNullOrEmpty(p.Dislikes)
-                    || !string.IsNullOrEmpty(p.Personality) || !string.IsNullOrEmpty(p.AboutMe);
-                if (hasNarrativeFields)
-                {
-                    DrawSectionHeader("Personality");
-                    DrawLongField("Likes", p.Likes);
-                    DrawLongField("Dislikes", p.Dislikes);
-                    DrawLongField("Personality", p.Personality);
-                    DrawLongField("About Me", p.AboutMe);
-                }
-
-                if (p.ThumbnailUrl is not null || p.MainImageUrl is not null || p.AdditionalImages.Count > 0)
-                {
-                    // Actual image rendering (fetching + texture-uploading a remote URL) is a
-                    // real separate capability this plugin doesn't have yet - deliberately out
-                    // of scope for a styling pass, same as event image_url. URLs stay as text.
-                    DrawSectionHeader("Images");
-                    if (p.ThumbnailUrl is not null)
-                        DrawInlineField("Thumbnail", p.ThumbnailUrl);
-                    if (p.MainImageUrl is not null)
-                        DrawInlineField("Main Image", p.MainImageUrl);
-                    foreach (var image in p.AdditionalImages)
-                        DrawInlineField(image.Caption ?? "Image", image.ImageUrl);
-                }
-
-                EndCard(statusColor);
+                DrawProfileContent(p);
+                EndCard(ApprovalStatusColor(p.ApprovalStatus));
                 break;
         }
     }
@@ -218,25 +130,9 @@ public partial class MainWindow
         _ = FetchProfileDetailAsync(characterId);
     }
 
-    private async Task FetchProfileDetailAsync(int characterId)
-    {
-        try
-        {
-            var result = await plugin.ApiClient.GetProfileDetailAsync(characterId);
-            if (result is null)
-            {
-                profileDetailErrorMessage = "Couldn't load character.";
-                profileDetailLoadState = VipLoadState.Error;
-                return;
-            }
-
-            profileDetail = result;
-            profileDetailLoadState = VipLoadState.Loaded;
-        }
-        catch (Exception ex)
-        {
-            profileDetailErrorMessage = $"Couldn't load character: {ex.Message}";
-            profileDetailLoadState = VipLoadState.Error;
-        }
-    }
+    private Task FetchProfileDetailAsync(int characterId) => LoadAsync(
+        () => plugin.ApiClient.GetProfileDetailAsync(characterId),
+        result => profileDetail = result,
+        (loadState, err) => { profileDetailLoadState = loadState; if (err != null) profileDetailErrorMessage = err; },
+        "Couldn't load character");
 }

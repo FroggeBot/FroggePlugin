@@ -1,6 +1,9 @@
 using System;
 using System.Numerics;
+using System.Threading.Tasks;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Utility;
+using FroggePlugin.Api;
 
 namespace FroggePlugin.Windows;
 
@@ -60,6 +63,16 @@ public partial class MainWindow
         return ColoredButton("< Back", MutedColor);
     }
 
+    // The API returns plain https://discord.com/... links (general-purpose, works as a browser
+    // fallback too). Rewriting to discord:// here - not server-side - is deliberate: Discord's
+    // desktop client registers discord:// as a real OS-level URL protocol handler (confirmed via
+    // the Windows registry, HKEY_CLASSES_ROOT\discord), so this makes Util.OpenLink launch the
+    // client directly instead of falling through to whatever handles https (typically a
+    // browser) - a Plugin/OS-environment concern, not something the API's link-resolution logic
+    // should need to encode.
+    private static void OpenDiscordLink(string url) =>
+        Util.OpenLink(url.Replace("https://discord.com", "discord://discord.com"));
+
     private static void DrawLoading() => ImGui.TextDisabled("Loading...");
 
     private static void DrawError(string? message, Action retry)
@@ -72,6 +85,79 @@ public partial class MainWindow
     }
 
     private static void DrawEmpty(string message) => ImGui.TextDisabled(message);
+
+    // Shared by DrawGiveaways()/DrawRaffles() - both screens are just "pick a linked venue,
+    // then go somewhere feature-specific," backed by the same guildsLoadState/guilds fields
+    // (MainWindow.cs) since venue membership has nothing to do with which feature is asking.
+    private void DrawGuildPicker(Action retry, Action<ulong, string> onSelect)
+    {
+        if (DrawBackButton())
+        {
+            page = Page.Home;
+            guildsLoadState = VipLoadState.Idle;
+            guilds = null;
+            guildsErrorMessage = null;
+            return;
+        }
+
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        switch (guildsLoadState)
+        {
+            case VipLoadState.Loading:
+                DrawLoading();
+                break;
+
+            case VipLoadState.Error:
+                DrawError(guildsErrorMessage, retry);
+                break;
+
+            case VipLoadState.Loaded:
+                if (guilds is null || guilds.Count == 0)
+                {
+                    DrawEmpty("No linked venues yet. Run /plugin-link again if you've joined a new one.");
+                    break;
+                }
+
+                foreach (var guild in guilds)
+                {
+                    if (ColoredButton($"{guild.GuildName}##{guild.GuildId}", AccentColor, FullWidthButton))
+                        onSelect(guild.GuildId, guild.GuildName);
+                    ImGui.Spacing();
+                }
+                break;
+        }
+    }
+
+    // Shared by every Fetch*Async method across Vip/Events/Profiles/Giveaways/Raffles.cs - each
+    // used to hand-roll the same try/fetch/null-check/catch shape against its own VipLoadState
+    // field. `ref`/`out` parameters aren't allowed in async methods, so the per-call state field
+    // can't be passed by reference - callers supply a `setState` closure instead. Not used by
+    // PerformShiftActionAsync (Events.cs, a genuinely different shape: two sequential awaits with
+    // a staleness guard after each) or LinkAsync (MainWindow.cs, its own distinct LinkState enum).
+    private static async Task LoadAsync<T>(
+        Func<Task<T?>> fetch,
+        Action<T> onSuccess,
+        Action<VipLoadState, string?> setState,
+        string notFoundMessage) where T : class
+    {
+        try
+        {
+            var result = await fetch();
+            if (result is null)
+            {
+                setState(VipLoadState.Error, notFoundMessage);
+                return;
+            }
+            onSuccess(result);
+            setState(VipLoadState.Loaded, null);
+        }
+        catch (Exception ex)
+        {
+            setState(VipLoadState.Error, $"{notFoundMessage}: {ex.Message}");
+        }
+    }
 
     // A bordered "card" for list items. Deliberately not BeginChild/EndChild: reflecting on the
     // actual Dalamud.Bindings.ImGui.dll on disk (not just general ImGui knowledge) showed this
@@ -183,5 +269,86 @@ public partial class MainWindow
         ImGui.TextDisabled(label);
         ImGui.TextWrapped(value);
         ImGui.Spacing();
+    }
+
+    // The read-only character-content body shared by the owner's self-view (MainWindow.Profiles.cs)
+    // and the manager's review screen (MainWindow.Manage.cs) - callers wrap this in their own
+    // BeginCard()/EndCard(), and the manager screen appends Approve/Reject buttons after calling
+    // this, before its own EndCard(). Justified as a shared static helper now that there's a
+    // second real consumer, matching this codebase's established "second consumer justifies
+    // extraction" precedent.
+    private static void DrawProfileContent(PluginProfileDetail p)
+    {
+        var statusColor = ApprovalStatusColor(p.ApprovalStatus);
+
+        DrawTitle(p.CharacterName);
+        if (p.IsPrimary)
+        {
+            ImGui.SameLine();
+            DrawBadge("Primary", AccentColor);
+        }
+        ImGui.SameLine();
+        DrawBadge(p.ApprovalStatus, statusColor);
+        ImGui.TextDisabled(p.GuildName);
+        if (p.RejectionReason is not null)
+        {
+            ImGui.Spacing();
+            DrawColored($"Rejection reason: {p.RejectionReason}", DangerColor);
+        }
+
+        var hasMainInfo = !string.IsNullOrEmpty(p.Jobs) || !string.IsNullOrEmpty(p.Rates);
+        if (hasMainInfo)
+        {
+            DrawSectionHeader("Main Info");
+            if (ImGui.BeginTable("##maininfo", 2, ImGuiTableFlags.SizingStretchSame))
+            {
+                DrawFieldRow("Jobs", p.Jobs, "Rates", p.Rates);
+                ImGui.EndTable();
+            }
+        }
+
+        var hasGlance = !string.IsNullOrEmpty(p.Race) || !string.IsNullOrEmpty(p.Clan)
+            || !string.IsNullOrEmpty(p.Gender) || !string.IsNullOrEmpty(p.Pronouns)
+            || !string.IsNullOrEmpty(p.Orientation) || !string.IsNullOrEmpty(p.World)
+            || !string.IsNullOrEmpty(p.DataCenter) || !string.IsNullOrEmpty(p.Height)
+            || !string.IsNullOrEmpty(p.Age) || !string.IsNullOrEmpty(p.MareCode);
+        if (hasGlance)
+        {
+            DrawSectionHeader("At A Glance");
+            if (ImGui.BeginTable("##glance", 2, ImGuiTableFlags.SizingStretchSame))
+            {
+                DrawFieldRow("Race", p.Race, "Clan", p.Clan);
+                DrawFieldRow("Gender", p.Gender, "Pronouns", p.Pronouns);
+                DrawFieldRow("Orientation", p.Orientation, "World", p.World);
+                DrawFieldRow("Data Center", p.DataCenter, "Height", p.Height);
+                DrawFieldRow("Age", p.Age, "Mare Code", p.MareCode);
+                ImGui.EndTable();
+            }
+        }
+
+        var hasNarrativeFields = !string.IsNullOrEmpty(p.Likes) || !string.IsNullOrEmpty(p.Dislikes)
+            || !string.IsNullOrEmpty(p.Personality) || !string.IsNullOrEmpty(p.AboutMe);
+        if (hasNarrativeFields)
+        {
+            DrawSectionHeader("Personality");
+            DrawLongField("Likes", p.Likes);
+            DrawLongField("Dislikes", p.Dislikes);
+            DrawLongField("Personality", p.Personality);
+            DrawLongField("About Me", p.AboutMe);
+        }
+
+        if (p.ThumbnailUrl is not null || p.MainImageUrl is not null || p.AdditionalImages.Count > 0)
+        {
+            // Actual image rendering (fetching + texture-uploading a remote URL) is a
+            // real separate capability this plugin doesn't have yet - deliberately out
+            // of scope for a styling pass, same as event image_url. URLs stay as text.
+            DrawSectionHeader("Images");
+            if (p.ThumbnailUrl is not null)
+                DrawInlineField("Thumbnail", p.ThumbnailUrl);
+            if (p.MainImageUrl is not null)
+                DrawInlineField("Main Image", p.MainImageUrl);
+            foreach (var image in p.AdditionalImages)
+                DrawInlineField(image.Caption ?? "Image", image.ImageUrl);
+        }
     }
 }

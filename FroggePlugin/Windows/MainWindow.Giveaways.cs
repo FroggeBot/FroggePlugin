@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Dalamud.Bindings.ImGui;
-using Dalamud.Utility;
 using FroggePlugin.Api;
 
 namespace FroggePlugin.Windows;
@@ -18,46 +17,7 @@ public partial class MainWindow
     private string? giveawayListErrorMessage;
     private List<PluginGiveawaySummary>? giveaways;
 
-    private void DrawGiveaways()
-    {
-        if (DrawBackButton())
-        {
-            page = Page.Home;
-            guildsLoadState = VipLoadState.Idle;
-            guilds = null;
-            guildsErrorMessage = null;
-            return;
-        }
-
-        ImGui.Separator();
-        ImGui.Spacing();
-
-        switch (guildsLoadState)
-        {
-            case VipLoadState.Loading:
-                DrawLoading();
-                break;
-
-            case VipLoadState.Error:
-                DrawError(guildsErrorMessage, StartGiveaways);
-                break;
-
-            case VipLoadState.Loaded:
-                if (guilds is null || guilds.Count == 0)
-                {
-                    DrawEmpty("No linked venues yet. Run /plugin-link again if you've joined a new one.");
-                    break;
-                }
-
-                foreach (var guild in guilds)
-                {
-                    if (ColoredButton($"{guild.GuildName}##{guild.GuildId}", AccentColor, FullWidthButton))
-                        StartGiveawayList(guild.GuildId, guild.GuildName);
-                    ImGui.Spacing();
-                }
-                break;
-        }
-    }
+    private void DrawGiveaways() => DrawGuildPicker(StartGiveaways, StartGiveawayList);
 
     private void StartGiveaways()
     {
@@ -67,27 +27,11 @@ public partial class MainWindow
         _ = FetchGuildsAsync();
     }
 
-    private async Task FetchGuildsAsync()
-    {
-        try
-        {
-            var result = await plugin.ApiClient.GetGuildsAsync();
-            if (result is null)
-            {
-                guildsErrorMessage = "Couldn't load venues.";
-                guildsLoadState = VipLoadState.Error;
-                return;
-            }
-
-            guilds = result;
-            guildsLoadState = VipLoadState.Loaded;
-        }
-        catch (Exception ex)
-        {
-            guildsErrorMessage = $"Couldn't load venues: {ex.Message}";
-            guildsLoadState = VipLoadState.Error;
-        }
-    }
+    private Task FetchGuildsAsync() => LoadAsync(
+        plugin.ApiClient.GetGuildsAsync,
+        result => guilds = result,
+        (loadState, err) => { guildsLoadState = loadState; if (err != null) guildsErrorMessage = err; },
+        "Couldn't load venues");
 
     private void DrawGiveawayList()
     {
@@ -176,7 +120,7 @@ public partial class MainWindow
                     {
                         ImGui.Spacing();
                         if (ImGui.Button($"View in Discord##{giveaway.Id}"))
-                            Util.OpenLink(link);
+                            OpenDiscordLink(link);
                     }
 
                     EndCard(AccentColor);
@@ -201,27 +145,11 @@ public partial class MainWindow
         _ = FetchGiveawaysAsync();
     }
 
-    private async Task FetchGiveawaysAsync()
-    {
-        try
-        {
-            var result = showConcludedGiveaways
-                ? await plugin.ApiClient.GetConcludedGiveawaysAsync(selectedGiveawayGuildId)
-                : await plugin.ApiClient.GetOpenGiveawaysAsync(selectedGiveawayGuildId);
-            if (result is null)
-            {
-                giveawayListErrorMessage = "Couldn't load giveaways.";
-                giveawayListLoadState = VipLoadState.Error;
-                return;
-            }
-
-            giveaways = result;
-            giveawayListLoadState = VipLoadState.Loaded;
-        }
-        catch (Exception ex)
-        {
-            giveawayListErrorMessage = $"Couldn't load giveaways: {ex.Message}";
-            giveawayListLoadState = VipLoadState.Error;
-        }
-    }
+    private Task FetchGiveawaysAsync() => LoadAsync(
+        () => showConcludedGiveaways
+            ? plugin.ApiClient.GetConcludedGiveawaysAsync(selectedGiveawayGuildId)
+            : plugin.ApiClient.GetOpenGiveawaysAsync(selectedGiveawayGuildId),
+        result => giveaways = result,
+        (loadState, err) => { giveawayListLoadState = loadState; if (err != null) giveawayListErrorMessage = err; },
+        "Couldn't load giveaways");
 }

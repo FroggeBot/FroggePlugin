@@ -81,27 +81,11 @@ public partial class MainWindow
         _ = FetchEventGuildsAsync();
     }
 
-    private async Task FetchEventGuildsAsync()
-    {
-        try
-        {
-            var result = await plugin.ApiClient.GetEventGuildsAsync();
-            if (result is null)
-            {
-                eventGuildsErrorMessage = "Couldn't load venues.";
-                eventGuildsLoadState = VipLoadState.Error;
-                return;
-            }
-
-            eventGuilds = result;
-            eventGuildsLoadState = VipLoadState.Loaded;
-        }
-        catch (Exception ex)
-        {
-            eventGuildsErrorMessage = $"Couldn't load venues: {ex.Message}";
-            eventGuildsLoadState = VipLoadState.Error;
-        }
-    }
+    private Task FetchEventGuildsAsync() => LoadAsync(
+        plugin.ApiClient.GetEventGuildsAsync,
+        result => eventGuilds = result,
+        (loadState, err) => { eventGuildsLoadState = loadState; if (err != null) eventGuildsErrorMessage = err; },
+        "Couldn't load venues");
 
     private void DrawEventList()
     {
@@ -160,27 +144,11 @@ public partial class MainWindow
         _ = FetchEventListAsync(guildId);
     }
 
-    private async Task FetchEventListAsync(ulong guildId)
-    {
-        try
-        {
-            var result = await plugin.ApiClient.GetUpcomingEventsAsync(guildId);
-            if (result is null)
-            {
-                eventListErrorMessage = "Couldn't load events.";
-                eventListLoadState = VipLoadState.Error;
-                return;
-            }
-
-            events = result;
-            eventListLoadState = VipLoadState.Loaded;
-        }
-        catch (Exception ex)
-        {
-            eventListErrorMessage = $"Couldn't load events: {ex.Message}";
-            eventListLoadState = VipLoadState.Error;
-        }
-    }
+    private Task FetchEventListAsync(ulong guildId) => LoadAsync(
+        () => plugin.ApiClient.GetUpcomingEventsAsync(guildId),
+        result => events = result,
+        (loadState, err) => { eventListLoadState = loadState; if (err != null) eventListErrorMessage = err; },
+        "Couldn't load events");
 
     private void DrawEventDetail()
     {
@@ -269,27 +237,11 @@ public partial class MainWindow
         _ = FetchEventDetailAsync(guildId, eventId);
     }
 
-    private async Task FetchEventDetailAsync(ulong guildId, int eventId)
-    {
-        try
-        {
-            var result = await plugin.ApiClient.GetEventDetailAsync(guildId, eventId);
-            if (result is null)
-            {
-                eventDetailErrorMessage = "Couldn't load event.";
-                eventDetailLoadState = VipLoadState.Error;
-                return;
-            }
-
-            eventDetail = result;
-            eventDetailLoadState = VipLoadState.Loaded;
-        }
-        catch (Exception ex)
-        {
-            eventDetailErrorMessage = $"Couldn't load event: {ex.Message}";
-            eventDetailLoadState = VipLoadState.Error;
-        }
-    }
+    private Task FetchEventDetailAsync(ulong guildId, int eventId) => LoadAsync(
+        () => plugin.ApiClient.GetEventDetailAsync(guildId, eventId),
+        result => eventDetail = result,
+        (loadState, err) => { eventDetailLoadState = loadState; if (err != null) eventDetailErrorMessage = err; },
+        "Couldn't load event");
 
     private void StartShiftAction(ulong guildId, int eventId, int shiftId, bool isSignup)
     {
