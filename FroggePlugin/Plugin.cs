@@ -34,7 +34,7 @@ public sealed class Plugin : IDalamudPlugin
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Opens the FroggePlugin window."
+            HelpMessage = "Opens the Frogge window."
         });
 
         PluginInterface.UiBuilder.Draw += WindowSystem.Draw;

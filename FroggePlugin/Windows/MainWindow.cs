@@ -32,6 +32,10 @@ public partial class MainWindow : Window, IDisposable
         GiveawayList,
         Raffles,
         RaffleList,
+        Manage,
+        ManageVenue,
+        ProfileApprovalQueue,
+        ProfileApprovalDetail,
     }
 
     private enum VipLoadState
@@ -64,7 +68,7 @@ public partial class MainWindow : Window, IDisposable
     private string? guildsErrorMessage;
     private List<PluginGuild>? guilds;
 
-    public MainWindow(Plugin plugin) : base("FroggePlugin##MainWindow")
+    public MainWindow(Plugin plugin) : base("Frogge##MainWindow")
     {
         SizeConstraints = new WindowSizeConstraints
         {
@@ -90,7 +94,7 @@ public partial class MainWindow : Window, IDisposable
             state = LinkState.Idle;
         }
 
-        DrawTitle("FroggePlugin");
+        DrawTitle("Frogge");
         ImGui.Separator();
         ImGui.Spacing();
 
@@ -124,6 +128,14 @@ public partial class MainWindow : Window, IDisposable
                 DrawRaffles(); break;
             case Page.RaffleList:
                 DrawRaffleList(); break;
+            case Page.Manage:
+                DrawManage(); break;
+            case Page.ManageVenue:
+                DrawManageVenue(); break;
+            case Page.ProfileApprovalQueue:
+                DrawProfileApprovalQueue(); break;
+            case Page.ProfileApprovalDetail:
+                DrawProfileApprovalDetail(); break;
             default:
                 DrawHome(); break;
         }
@@ -156,6 +168,10 @@ public partial class MainWindow : Window, IDisposable
 
         if (ColoredButton("Raffles", AccentColor, FullWidthButton))
             StartRaffles();
+        ImGui.Spacing();
+
+        if (ColoredButton("Manage", AccentColor, FullWidthButton))
+            StartManage();
 
         ImGui.Spacing();
         ImGui.Separator();

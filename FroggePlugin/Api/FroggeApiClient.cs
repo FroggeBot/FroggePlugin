@@ -28,7 +28,7 @@ public sealed record PluginPositionDetail(string PositionName, List<PluginShiftD
 
 public sealed record PluginEventDetail(int Id, ulong GuildId, string Name, string? Description, DateTimeOffset StartAt, DateTimeOffset? EndAt, string? ImageUrl, List<PluginPositionDetail> Positions);
 
-public sealed record PluginGuild(ulong GuildId, string GuildName);
+public sealed record PluginGuild(ulong GuildId, string GuildName, bool IsManager);
 
 public sealed record PluginGiveawaySummary(
     int Id,
@@ -285,6 +285,42 @@ public sealed class FroggeApiClient : IDisposable
             return null;
         }
         return await response.Content.ReadFromJsonAsync<PluginProfileDetail>(JsonOptions);
+    }
+
+    public async Task<List<PluginProfileSummary>?> GetPendingProfileApprovalsAsync(ulong guildId)
+    {
+        using var response = await httpClient.GetAsync($"/plugin/manage/profiles/pending?guild_id={guildId}");
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+        return await response.Content.ReadFromJsonAsync<List<PluginProfileSummary>>(JsonOptions);
+    }
+
+    public async Task<PluginProfileDetail?> GetProfileApprovalDetailAsync(ulong guildId, int characterId)
+    {
+        using var response = await httpClient.GetAsync($"/plugin/manage/profiles/{characterId}?guild_id={guildId}");
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+        return await response.Content.ReadFromJsonAsync<PluginProfileDetail>(JsonOptions);
+    }
+
+    public async Task<bool> ApproveProfileAsync(ulong guildId, int characterId)
+    {
+        using var response = await httpClient.PostAsync(
+            $"/plugin/manage/profiles/{characterId}/approve?guild_id={guildId}", null
+        );
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<bool> RejectProfileAsync(ulong guildId, int characterId, string reason)
+    {
+        using var response = await httpClient.PostAsJsonAsync(
+            $"/plugin/manage/profiles/{characterId}/reject?guild_id={guildId}", new { reason }, JsonOptions
+        );
+        return response.IsSuccessStatusCode;
     }
 
     public async Task<bool> RevokeAsync()
