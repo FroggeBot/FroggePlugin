@@ -57,13 +57,22 @@ install path; set the `DALAMUD_HOME` environment variable if yours lives elsewhe
 dotnet build
 ```
 
-To load it in-game for local dev, add this repo's `FroggePlugin/bin/x64/Debug` (or `Release`)
-output directory as a "Dev Plugin Location" in the Dalamud plugin installer (`/xlplugins` → Dev
-Plugins).
+To load it in-game for local dev, add this repo's `FroggePlugin/bin/Debug` (or `Release`) output
+directory as a "Dev Plugin Location" in the Dalamud plugin installer (`/xlplugins` → Dev Plugins).
+
+## Distributing dev-testing builds
+
+This repo is public (`https://github.com/FroggeBot/FroggePlugin`) and has a custom Dalamud plugin
+repository: `.github/workflows/release.yml` builds/packages/releases a fresh dev build on every
+push to `master` (via `DalamudPackager`, wired into `FroggePlugin.csproj`'s Release-only
+`PackagePlugin` target) and bumps `pluginmaster.json`'s version to match. A tester adds
+`https://raw.githubusercontent.com/FroggeBot/FroggePlugin/master/pluginmaster.json` under Dalamud's
+Plugin Installer → Settings (gear icon) → Experimental → Custom Plugin Repositories, and gets a
+normal Install/Update button from then on instead of manual DLL sharing.
 
 ## Status
 
-Not yet its own GitHub repo — still local under the `FroggeBot/` workspace directory. Auth
-(pairing-code link/unlink), VIP Status/History/Perks, Events browsing with real self-signup, and
-read-only Profiles viewing are all shipped and live-verified in-game. Not yet in the official
-Dalamud plugin repository — still installed manually as a local dev plugin.
+Auth (pairing-code link/unlink), VIP Status/History/Perks, Events browsing with real self-signup,
+read-only Profiles viewing, Giveaways/Raffles browsing, and a venue-manager surface (Profile
+approvals so far) are all shipped and live-verified in-game. Not yet in the official Dalamud
+plugin repository — distributed via the custom repository above instead.
