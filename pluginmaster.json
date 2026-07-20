@@ -1,28 +1,30 @@
-{
-  "Author": "FroggeBot",
-  "Name": "Frogge",
-  "InternalName": "FroggePlugin",
-  "Punchline": "In-game companion for FroggeBot venue management.",
-  "Description": "View your VIP status, browse venue events, and more, without leaving the game. Companion client for the FroggeBot Discord bot.",
-  "Changelog": "",
-  "RepoUrl": "https://github.com/FroggeBot/FroggePlugin",
-  "ApplicableVersion": "any",
-  "DalamudApiLevel": 15,
-  "Tags": [
-    "frogge",
-    "venue",
-    "roleplay"
-  ],
-  "CategoryTags": [
-    "other"
-  ],
-  "IconUrl": "",
-  "ImageUrls": [],
-  "AssemblyVersion": "0.0.0.3",
-  "IsHide": false,
-  "IsTestingExclusive": false,
-  "LastUpdate": "1784519248",
-  "DownloadLinkInstall": "https://github.com/FroggeBot/FroggePlugin/releases/latest/download/FroggePlugin.zip",
-  "DownloadLinkUpdate": "https://github.com/FroggeBot/FroggePlugin/releases/latest/download/FroggePlugin.zip",
-  "DownloadLinkTesting": "https://github.com/FroggeBot/FroggePlugin/releases/latest/download/FroggePlugin.zip"
-}
+[
+  {
+    "Author": "FroggeBot",
+    "Name": "Frogge",
+    "InternalName": "FroggePlugin",
+    "Punchline": "In-game companion for FroggeBot venue management.",
+    "Description": "View your VIP status, browse venue events, and more, without leaving the game. Companion client for the FroggeBot Discord bot.",
+    "Changelog": "",
+    "RepoUrl": "https://github.com/FroggeBot/FroggePlugin",
+    "ApplicableVersion": "any",
+    "DalamudApiLevel": 15,
+    "Tags": [
+      "frogge",
+      "venue",
+      "roleplay"
+    ],
+    "CategoryTags": [
+      "other"
+    ],
+    "IconUrl": "",
+    "ImageUrls": [],
+    "AssemblyVersion": "0.0.0.3",
+    "IsHide": false,
+    "IsTestingExclusive": false,
+    "LastUpdate": 1784519248,
+    "DownloadLinkInstall": "https://github.com/FroggeBot/FroggePlugin/releases/latest/download/FroggePlugin.zip",
+    "DownloadLinkUpdate": "https://github.com/FroggeBot/FroggePlugin/releases/latest/download/FroggePlugin.zip",
+    "DownloadLinkTesting": "https://github.com/FroggeBot/FroggePlugin/releases/latest/download/FroggePlugin.zip"
+  }
+]

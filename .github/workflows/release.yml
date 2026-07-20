@@ -41,10 +41,10 @@ jobs:
 
       - name: Update pluginmaster.json
         run: |
-          $json = Get-Content pluginmaster.json | ConvertFrom-Json
+          $json = @(Get-Content pluginmaster.json | ConvertFrom-Json)
           $json[0].AssemblyVersion = "0.0.0.${{ github.run_number }}"
-          $json[0].LastUpdate = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds().ToString()
-          $json | ConvertTo-Json -Depth 5 | Set-Content pluginmaster.json
+          $json[0].LastUpdate = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+          $json | ConvertTo-Json -Depth 5 -AsArray | Set-Content pluginmaster.json
 
       - name: Commit pluginmaster.json
         run: |
