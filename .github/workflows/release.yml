@@ -4,6 +4,7 @@ on:
   push:
     branches: [master]
     paths-ignore: ['pluginmaster.json']
+  workflow_dispatch: {}
 
 permissions:
   contents: write
