@@ -1,0 +1,22 @@
+[
+  {
+    "Author": "FroggeBot",
+    "Name": "Frogge",
+    "InternalName": "FroggePlugin",
+    "Punchline": "In-game companion for FroggeBot venue management.",
+    "Description": "View your VIP status, browse venue events, and more, without leaving the game. Companion client for the FroggeBot Discord bot.",
+    "RepoUrl": "https://github.com/FroggeBot/FroggePlugin",
+    "ApplicableVersion": "any",
+    "DalamudApiLevel": 15,
+    "Tags": [
+      "frogge",
+      "venue",
+      "roleplay"
+    ],
+    "AssemblyVersion": "0.0.0.0",
+    "IsHide": false,
+    "DownloadLinkInstall": "https://github.com/FroggeBot/FroggePlugin/releases/latest/download/FroggePlugin.zip",
+    "DownloadLinkUpdate": "https://github.com/FroggeBot/FroggePlugin/releases/latest/download/FroggePlugin.zip",
+    "DownloadLinkTesting": "https://github.com/FroggeBot/FroggePlugin/releases/latest/download/FroggePlugin.zip"
+  }
+]

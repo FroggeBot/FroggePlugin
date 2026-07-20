@@ -6,4 +6,15 @@
     <PackageProjectUrl>https://github.com/FroggeBot/FroggePlugin</PackageProjectUrl>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
+
+  <!-- Packages a release-ready zip (manifest + DLL) for the custom Dalamud repository release
+       pipeline. Release-only, so the everyday local Debug dev-loop is untouched. -->
+  <Target Name="PackagePlugin" AfterTargets="Build" Condition="'$(Configuration)'=='Release'">
+    <DalamudPackager
+        ProjectDir="$(ProjectDir)"
+        OutputPath="$(OutputPath)"
+        AssemblyName="$(AssemblyName)"
+        ManifestType="json"
+        MakeZip="true" />
+  </Target>
 </Project>
