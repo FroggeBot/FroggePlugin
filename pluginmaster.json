@@ -19,10 +19,10 @@
     ],
     "IconUrl": "https://raw.githubusercontent.com/FroggeBot/FroggePlugin/master/FroggePlugin/images/icon.png",
     "ImageUrls": [],
-    "AssemblyVersion": "0.0.0.8",
+    "AssemblyVersion": "0.0.0.9",
     "IsHide": false,
     "IsTestingExclusive": false,
-    "LastUpdate": 1784602410,
+    "LastUpdate": 1784611771,
     "DownloadLinkInstall": "https://github.com/FroggeBot/FroggePlugin/releases/latest/download/FroggePlugin.zip",
     "DownloadLinkUpdate": "https://github.com/FroggeBot/FroggePlugin/releases/latest/download/FroggePlugin.zip",
     "DownloadLinkTesting": "https://github.com/FroggeBot/FroggePlugin/releases/latest/download/FroggePlugin.zip"
