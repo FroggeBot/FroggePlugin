@@ -39,6 +39,11 @@ public partial class MainWindow : Window, IDisposable
         ManageVipRoster,
         ManageVipMemberDetail,
         ManageVipAssignTarget,
+        ManageGiveawayList,
+        ManageGiveawayDetail,
+        ManageRaffleList,
+        ManageRaffleDetail,
+        ManageRaffleAssignTarget,
         Settings,
     }
 
@@ -154,6 +159,16 @@ public partial class MainWindow : Window, IDisposable
                 DrawManageVipMemberDetail(); break;
             case Page.ManageVipAssignTarget:
                 DrawManageVipAssignTarget(); break;
+            case Page.ManageGiveawayList:
+                DrawManageGiveawayList(); break;
+            case Page.ManageGiveawayDetail:
+                DrawManageGiveawayDetail(); break;
+            case Page.ManageRaffleList:
+                DrawManageRaffleList(); break;
+            case Page.ManageRaffleDetail:
+                DrawManageRaffleDetail(); break;
+            case Page.ManageRaffleAssignTarget:
+                DrawManageRaffleAssignTarget(); break;
             default:
                 DrawHome(); break;
         }
