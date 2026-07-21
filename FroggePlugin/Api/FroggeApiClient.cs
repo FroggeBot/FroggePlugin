@@ -119,6 +119,10 @@ public sealed class FroggeApiClient : IDisposable
             token is null ? null : new AuthenticationHeaderValue("Bearer", token);
     }
 
+    // BaseAddress has no lifecycle restriction on HttpClient (unlike some other properties) -
+    // safe to reassign at any time, even after requests have already been sent.
+    public void SetApiBaseUrl(string url) => httpClient.BaseAddress = new Uri(url);
+
     public async Task<bool> PingAsync()
     {
         using var response = await httpClient.GetAsync("/health");

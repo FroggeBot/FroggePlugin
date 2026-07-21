@@ -36,6 +36,7 @@ public partial class MainWindow : Window, IDisposable
         ManageVenue,
         ProfileApprovalQueue,
         ProfileApprovalDetail,
+        Settings,
     }
 
     private enum VipLoadState
@@ -97,6 +98,14 @@ public partial class MainWindow : Window, IDisposable
         DrawTitle("Frogge");
         ImGui.Separator();
         ImGui.Spacing();
+
+        // Reachable regardless of link state - fixing a bad ApiBaseUrl is exactly the scenario
+        // where the player can't link at all yet, so Settings can't sit behind that gate.
+        if (page == Page.Settings)
+        {
+            DrawSettings();
+            return;
+        }
 
         if (plugin.Configuration.AuthToken is null)
         {
@@ -177,6 +186,10 @@ public partial class MainWindow : Window, IDisposable
         ImGui.Separator();
         ImGui.Spacing();
 
+        if (ColoredButton("Settings", MutedColor, FullWidthButton))
+            StartSettings();
+        ImGui.Spacing();
+
         if (ColoredButton("Forget", DangerColor, FullWidthButton))
         {
             plugin.Configuration.AuthToken = null;
@@ -212,6 +225,12 @@ public partial class MainWindow : Window, IDisposable
             ImGui.TextDisabled("Linking...");
         else if (state == LinkState.Error && errorMessage is not null)
             DrawColored(errorMessage, DangerColor);
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+        if (ColoredButton("Settings", MutedColor))
+            StartSettings();
     }
 
     private void StartLink()
