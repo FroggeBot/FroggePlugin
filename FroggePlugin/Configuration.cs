@@ -8,7 +8,7 @@ public class Configuration : IPluginConfiguration
 {
     public int Version { get; set; } = 0;
 
-    public string ApiBaseUrl { get; set; } = "http://127.0.0.1:8000";
+    public string ApiBaseUrl { get; set; } = "https://api.frogge.tech";
 
     public string? AuthToken { get; set; }
     public ulong? LinkedDiscordUserId { get; set; }

@@ -26,6 +26,15 @@ public sealed class Plugin : IDalamudPlugin
     {
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
 
+        // Early testing builds defaulted ApiBaseUrl to a local dev address - a saved config from
+        // one of those still has that value on disk and won't pick up Configuration's own default
+        // just by upgrading, since Dalamud loads whatever was persisted. Self-correct once.
+        if (Configuration.ApiBaseUrl == "http://127.0.0.1:8000")
+        {
+            Configuration.ApiBaseUrl = "https://api.frogge.tech";
+            Configuration.Save();
+        }
+
         ApiClient = new FroggeApiClient(Configuration);
         ApiClient.SetAuthToken(Configuration.AuthToken);
 
