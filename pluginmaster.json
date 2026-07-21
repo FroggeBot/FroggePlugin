@@ -1,10 +1,10 @@
 [
   {
-    "Author": "FroggeBot",
+    "Author": "Allegro Vivo",
     "Name": "Frogge",
     "InternalName": "FroggePlugin",
     "Punchline": "In-game companion for FroggeBot venue management.",
-    "Description": "View your VIP status, browse venue events, and more, without leaving the game. Companion client for the FroggeBot Discord bot.",
+    "Description": "View your VIP status, browse venue events, character profiles, giveaways, and raffles, and (for venue managers) review pending profile submissions - all without leaving the game. Companion client for the FroggeBot Discord bot.",
     "Changelog": "",
     "RepoUrl": "https://github.com/FroggeBot/FroggePlugin",
     "ApplicableVersion": "any",
@@ -17,7 +17,7 @@
     "CategoryTags": [
       "other"
     ],
-    "IconUrl": "",
+    "IconUrl": "https://raw.githubusercontent.com/FroggeBot/FroggePlugin/master/FroggePlugin/images/icon.png",
     "ImageUrls": [],
     "AssemblyVersion": "0.0.0.6",
     "IsHide": false,
