@@ -12,6 +12,16 @@ public partial class MainWindow
     private VipLoadState testConnectionState = VipLoadState.Idle;
     private string? testConnectionMessage;
 
+    // Dalamud's own config-UI entry point (Plugin.cs's OpenConfigUi handler, wired to
+    // PluginInterface.UiBuilder.OpenConfigUi) - the gear icon in the Plugin Installer's list
+    // calls this. Opens the window if it isn't already and jumps straight to Settings, reusing
+    // the exact same navigation StartSettings() already does for the in-window button.
+    public void OpenSettings()
+    {
+        IsOpen = true;
+        StartSettings();
+    }
+
     private void DrawSettings()
     {
         if (DrawBackButton())
