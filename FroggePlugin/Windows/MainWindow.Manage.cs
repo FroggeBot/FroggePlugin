@@ -96,6 +96,10 @@ public partial class MainWindow
 
         if (ColoredButton("Profile Approvals", AccentColor, FullWidthButton))
             StartProfileApprovalQueue();
+        ImGui.Spacing();
+
+        if (ColoredButton("VIP Members", AccentColor, FullWidthButton))
+            StartManageVipRoster();
     }
 
     private void StartManageVenue(ulong guildId, string guildName)

@@ -36,6 +36,9 @@ public partial class MainWindow : Window, IDisposable
         ManageVenue,
         ProfileApprovalQueue,
         ProfileApprovalDetail,
+        ManageVipRoster,
+        ManageVipMemberDetail,
+        ManageVipAssignTarget,
         Settings,
     }
 
@@ -145,6 +148,12 @@ public partial class MainWindow : Window, IDisposable
                 DrawProfileApprovalQueue(); break;
             case Page.ProfileApprovalDetail:
                 DrawProfileApprovalDetail(); break;
+            case Page.ManageVipRoster:
+                DrawManageVipRoster(); break;
+            case Page.ManageVipMemberDetail:
+                DrawManageVipMemberDetail(); break;
+            case Page.ManageVipAssignTarget:
+                DrawManageVipAssignTarget(); break;
             default:
                 DrawHome(); break;
         }

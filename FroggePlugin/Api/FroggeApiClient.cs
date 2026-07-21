@@ -18,6 +18,16 @@ public sealed record PluginVipHistoryPeriod(string TierName, DateTimeOffset Star
 
 public sealed record PluginVipPerkStatus(string Text, string RedemptionStatus);
 
+// Cost is long, not int - the server places no upper bound on a VIP tier's cost, and real dev
+// data already has a tier well past Int32.MaxValue (confirmed live, not a guess).
+public sealed record PluginVipTierSummary(int Id, string Name, long Cost);
+
+public sealed record PluginVipMemberSummary(int Id, ulong DiscordUserId, string DisplayName, string TierName, DateTimeOffset? ExpiresAt);
+
+public sealed record PluginVipMemberDetail(int Id, ulong DiscordUserId, string DisplayName, int TierId, string TierName, DateTimeOffset? ExpiresAt, string? Notes);
+
+public sealed record PluginResolveCharacterResponse(ulong DiscordUserId, string CharacterName);
+
 public sealed record PluginEventGuild(ulong GuildId, string GuildName);
 
 public sealed record PluginEventSummary(int Id, ulong GuildId, string Name, string? Description, DateTimeOffset StartAt, DateTimeOffset? EndAt, string? ImageUrl);
@@ -102,237 +112,220 @@ public sealed class FroggeApiClient : IDisposable
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
     };
 
-    private readonly HttpClient httpClient;
+    private HttpClient httpClient;
+    private string? authToken;
 
     public FroggeApiClient(Configuration configuration)
     {
-        httpClient = new HttpClient
-        {
-            BaseAddress = new Uri(configuration.ApiBaseUrl),
-            Timeout = TimeSpan.FromSeconds(10)
-        };
+        httpClient = CreateClient(configuration.ApiBaseUrl);
     }
+
+    private static HttpClient CreateClient(string baseUrl) => new()
+    {
+        BaseAddress = new Uri(baseUrl),
+        Timeout = TimeSpan.FromSeconds(10)
+    };
 
     public void SetAuthToken(string? token)
     {
+        authToken = token;
         httpClient.DefaultRequestHeaders.Authorization =
             token is null ? null : new AuthenticationHeaderValue("Bearer", token);
     }
 
-    // BaseAddress has no lifecycle restriction on HttpClient (unlike some other properties) -
-    // safe to reassign at any time, even after requests have already been sent.
-    public void SetApiBaseUrl(string url) => httpClient.BaseAddress = new Uri(url);
-
-    public async Task<bool> PingAsync()
+    // HttpClient throws InvalidOperationException on BaseAddress (and several other properties)
+    // once it's already sent a request - confirmed live via a real in-game exception, not assumed.
+    // The only way to actually change it at runtime is a fresh instance; the old one finishes
+    // whatever's already in flight against it and gets disposed once the new one is in place.
+    public void SetApiBaseUrl(string url)
     {
-        using var response = await httpClient.GetAsync("/health");
-        return response.IsSuccessStatusCode;
+        var old = httpClient;
+        var next = CreateClient(url);
+        next.DefaultRequestHeaders.Authorization =
+            authToken is null ? null : new AuthenticationHeaderValue("Bearer", authToken);
+        httpClient = next;
+        old.Dispose();
     }
 
-    public async Task<PluginTokenRedeemed?> RedeemPairingCodeAsync(string code)
+    // --- Logging plumbing ---------------------------------------------------------------
+    // Every request goes through here so it's always visible in dalamud.log without having
+    // to reverse-engineer failures from the outside (server DB, curl, etc.) after the fact -
+    // exactly the kind of thing that ate a lot of time before this existed. Logged at
+    // Information (not Debug/Verbose), since Dalamud's default log level may filter those out
+    // and the whole point is these are reliably visible.
+
+    private static string Truncate(string body, int max = 500) =>
+        body.Length <= max ? body : body[..max] + "... (truncated)";
+
+    private async Task<(bool Success, string Body)> SendAsync(HttpMethod method, string url, HttpContent? content = null)
     {
-        using var response = await httpClient.PostAsJsonAsync("/plugin-auth/redeem", new { code }, JsonOptions);
-        if (!response.IsSuccessStatusCode)
+        Plugin.Log.Information($"{method} {url}");
+        using var request = new HttpRequestMessage(method, url) { Content = content };
+        using var response = await httpClient.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        if (response.IsSuccessStatusCode)
         {
-            return null;
+            Plugin.Log.Information($"{method} {url} -> {(int)response.StatusCode}");
         }
-        return await response.Content.ReadFromJsonAsync<PluginTokenRedeemed>(JsonOptions);
-    }
-
-    public async Task<PluginAuthMe?> GetMeAsync()
-    {
-        using var response = await httpClient.GetAsync("/plugin-auth/me");
-        if (!response.IsSuccessStatusCode)
+        else
         {
-            return null;
+            Plugin.Log.Warning($"{method} {url} -> {(int)response.StatusCode} {response.StatusCode}: {Truncate(body)}");
         }
-        return await response.Content.ReadFromJsonAsync<PluginAuthMe>(JsonOptions);
+
+        return (response.IsSuccessStatusCode, body);
     }
 
-    public async Task<List<PluginVipMembership>?> GetVipMembershipsAsync()
+    // Deserializes from an already-read string (not directly off the response stream) so the
+    // raw body is always available to log, even when deserialization itself fails - that raw
+    // body is what actually diagnosed the last two real bugs (an int overflow, a bad URL),
+    // versus reflection-guessing on this side alone.
+    private static T? Deserialize<T>(string url, string body)
     {
-        using var response = await httpClient.GetAsync("/plugin/vip/memberships");
-        if (!response.IsSuccessStatusCode)
+        try
         {
-            return null;
+            return JsonSerializer.Deserialize<T>(body, JsonOptions);
         }
-        return await response.Content.ReadFromJsonAsync<List<PluginVipMembership>>(JsonOptions);
-    }
-
-    public async Task<List<PluginVipHistoryPeriod>?> GetVipHistoryAsync(ulong guildId)
-    {
-        using var response = await httpClient.GetAsync($"/plugin/vip/history?guild_id={guildId}");
-        if (!response.IsSuccessStatusCode)
+        catch (Exception ex)
         {
-            return null;
+            Plugin.Log.Error(ex, $"Failed to deserialize response from {url}. Body: {Truncate(body)}");
+            throw;
         }
-        return await response.Content.ReadFromJsonAsync<List<PluginVipHistoryPeriod>>(JsonOptions);
     }
 
-    public async Task<List<PluginVipPerkStatus>?> GetVipPerksAsync(ulong guildId)
+    private async Task<T?> GetJsonAsync<T>(string url)
     {
-        using var response = await httpClient.GetAsync($"/plugin/vip/perks?guild_id={guildId}");
-        if (!response.IsSuccessStatusCode)
-        {
-            return null;
-        }
-        return await response.Content.ReadFromJsonAsync<List<PluginVipPerkStatus>>(JsonOptions);
+        var (success, body) = await SendAsync(HttpMethod.Get, url);
+        return success ? Deserialize<T>(url, body) : default;
     }
 
-    public async Task<List<PluginEventGuild>?> GetEventGuildsAsync()
+    private async Task<bool> GetOkAsync(string url)
     {
-        using var response = await httpClient.GetAsync("/plugin/events/guilds");
-        if (!response.IsSuccessStatusCode)
-        {
-            return null;
-        }
-        return await response.Content.ReadFromJsonAsync<List<PluginEventGuild>>(JsonOptions);
+        var (success, _) = await SendAsync(HttpMethod.Get, url);
+        return success;
     }
 
-    public async Task<List<PluginEventSummary>?> GetUpcomingEventsAsync(ulong guildId)
+    private async Task<T?> PostJsonAsync<T>(string url, object? payload = null)
     {
-        using var response = await httpClient.GetAsync($"/plugin/events?guild_id={guildId}");
-        if (!response.IsSuccessStatusCode)
-        {
-            return null;
-        }
-        return await response.Content.ReadFromJsonAsync<List<PluginEventSummary>>(JsonOptions);
+        using var content = payload is null ? null : JsonContent.Create(payload, options: JsonOptions);
+        var (success, body) = await SendAsync(HttpMethod.Post, url, content);
+        return success ? Deserialize<T>(url, body) : default;
     }
 
-    public async Task<PluginEventDetail?> GetEventDetailAsync(ulong guildId, int eventId)
+    private async Task<bool> PostOkAsync(string url, object? payload = null)
     {
-        using var response = await httpClient.GetAsync($"/plugin/events/{eventId}?guild_id={guildId}");
-        if (!response.IsSuccessStatusCode)
-        {
-            return null;
-        }
-        return await response.Content.ReadFromJsonAsync<PluginEventDetail>(JsonOptions);
+        using var content = payload is null ? null : JsonContent.Create(payload, options: JsonOptions);
+        var (success, _) = await SendAsync(HttpMethod.Post, url, content);
+        return success;
     }
 
-    public async Task<bool> SignupForShiftAsync(ulong guildId, int shiftId)
+    private async Task<T?> PutJsonAsync<T>(string url, object payload)
     {
-        using var response = await httpClient.PostAsync($"/plugin/events/shifts/{shiftId}/signup?guild_id={guildId}", null);
-        return response.IsSuccessStatusCode;
+        using var content = JsonContent.Create(payload, options: JsonOptions);
+        var (success, body) = await SendAsync(HttpMethod.Put, url, content);
+        return success ? Deserialize<T>(url, body) : default;
     }
 
-    public async Task<bool> LeaveShiftAsync(ulong guildId, int shiftId)
+    private async Task<bool> DeleteOkAsync(string url)
     {
-        using var response = await httpClient.DeleteAsync($"/plugin/events/shifts/{shiftId}/signup?guild_id={guildId}");
-        return response.IsSuccessStatusCode;
+        var (success, _) = await SendAsync(HttpMethod.Delete, url);
+        return success;
     }
 
-    public async Task<List<PluginGuild>?> GetGuildsAsync()
-    {
-        using var response = await httpClient.GetAsync("/plugin/guilds");
-        if (!response.IsSuccessStatusCode)
-        {
-            return null;
-        }
-        return await response.Content.ReadFromJsonAsync<List<PluginGuild>>(JsonOptions);
-    }
+    // --- Endpoints ------------------------------------------------------------------------
 
-    public async Task<List<PluginGiveawaySummary>?> GetOpenGiveawaysAsync(ulong guildId)
-    {
-        using var response = await httpClient.GetAsync($"/plugin/giveaways?guild_id={guildId}");
-        if (!response.IsSuccessStatusCode)
-        {
-            return null;
-        }
-        return await response.Content.ReadFromJsonAsync<List<PluginGiveawaySummary>>(JsonOptions);
-    }
+    public Task<bool> PingAsync() => GetOkAsync("/health");
 
-    public async Task<List<PluginGiveawaySummary>?> GetConcludedGiveawaysAsync(ulong guildId)
-    {
-        using var response = await httpClient.GetAsync($"/plugin/giveaways/concluded?guild_id={guildId}");
-        if (!response.IsSuccessStatusCode)
-        {
-            return null;
-        }
-        return await response.Content.ReadFromJsonAsync<List<PluginGiveawaySummary>>(JsonOptions);
-    }
+    public Task<PluginTokenRedeemed?> RedeemPairingCodeAsync(string code) =>
+        PostJsonAsync<PluginTokenRedeemed>("/plugin-auth/redeem", new { code });
 
-    public async Task<List<PluginRaffleSummary>?> GetOpenRafflesAsync(ulong guildId)
-    {
-        using var response = await httpClient.GetAsync($"/plugin/raffles?guild_id={guildId}");
-        if (!response.IsSuccessStatusCode)
-        {
-            return null;
-        }
-        return await response.Content.ReadFromJsonAsync<List<PluginRaffleSummary>>(JsonOptions);
-    }
+    public Task<PluginAuthMe?> GetMeAsync() => GetJsonAsync<PluginAuthMe>("/plugin-auth/me");
 
-    public async Task<List<PluginRaffleSummary>?> GetConcludedRafflesAsync(ulong guildId)
-    {
-        using var response = await httpClient.GetAsync($"/plugin/raffles/concluded?guild_id={guildId}");
-        if (!response.IsSuccessStatusCode)
-        {
-            return null;
-        }
-        return await response.Content.ReadFromJsonAsync<List<PluginRaffleSummary>>(JsonOptions);
-    }
+    public Task<List<PluginVipMembership>?> GetVipMembershipsAsync() =>
+        GetJsonAsync<List<PluginVipMembership>>("/plugin/vip/memberships");
 
-    public async Task<List<PluginProfileSummary>?> GetProfilesAsync()
-    {
-        using var response = await httpClient.GetAsync("/plugin/profiles");
-        if (!response.IsSuccessStatusCode)
-        {
-            return null;
-        }
-        return await response.Content.ReadFromJsonAsync<List<PluginProfileSummary>>(JsonOptions);
-    }
+    public Task<List<PluginVipHistoryPeriod>?> GetVipHistoryAsync(ulong guildId) =>
+        GetJsonAsync<List<PluginVipHistoryPeriod>>($"/plugin/vip/history?guild_id={guildId}");
 
-    public async Task<PluginProfileDetail?> GetProfileDetailAsync(int characterId)
-    {
-        using var response = await httpClient.GetAsync($"/plugin/profiles/{characterId}");
-        if (!response.IsSuccessStatusCode)
-        {
-            return null;
-        }
-        return await response.Content.ReadFromJsonAsync<PluginProfileDetail>(JsonOptions);
-    }
+    public Task<List<PluginVipPerkStatus>?> GetVipPerksAsync(ulong guildId) =>
+        GetJsonAsync<List<PluginVipPerkStatus>>($"/plugin/vip/perks?guild_id={guildId}");
 
-    public async Task<List<PluginProfileSummary>?> GetPendingProfileApprovalsAsync(ulong guildId)
-    {
-        using var response = await httpClient.GetAsync($"/plugin/manage/profiles/pending?guild_id={guildId}");
-        if (!response.IsSuccessStatusCode)
-        {
-            return null;
-        }
-        return await response.Content.ReadFromJsonAsync<List<PluginProfileSummary>>(JsonOptions);
-    }
+    public Task<List<PluginEventGuild>?> GetEventGuildsAsync() =>
+        GetJsonAsync<List<PluginEventGuild>>("/plugin/events/guilds");
 
-    public async Task<PluginProfileDetail?> GetProfileApprovalDetailAsync(ulong guildId, int characterId)
-    {
-        using var response = await httpClient.GetAsync($"/plugin/manage/profiles/{characterId}?guild_id={guildId}");
-        if (!response.IsSuccessStatusCode)
-        {
-            return null;
-        }
-        return await response.Content.ReadFromJsonAsync<PluginProfileDetail>(JsonOptions);
-    }
+    public Task<List<PluginEventSummary>?> GetUpcomingEventsAsync(ulong guildId) =>
+        GetJsonAsync<List<PluginEventSummary>>($"/plugin/events?guild_id={guildId}");
 
-    public async Task<bool> ApproveProfileAsync(ulong guildId, int characterId)
-    {
-        using var response = await httpClient.PostAsync(
-            $"/plugin/manage/profiles/{characterId}/approve?guild_id={guildId}", null
+    public Task<PluginEventDetail?> GetEventDetailAsync(ulong guildId, int eventId) =>
+        GetJsonAsync<PluginEventDetail>($"/plugin/events/{eventId}?guild_id={guildId}");
+
+    public Task<bool> SignupForShiftAsync(ulong guildId, int shiftId) =>
+        PostOkAsync($"/plugin/events/shifts/{shiftId}/signup?guild_id={guildId}");
+
+    public Task<bool> LeaveShiftAsync(ulong guildId, int shiftId) =>
+        DeleteOkAsync($"/plugin/events/shifts/{shiftId}/signup?guild_id={guildId}");
+
+    public Task<List<PluginGuild>?> GetGuildsAsync() => GetJsonAsync<List<PluginGuild>>("/plugin/guilds");
+
+    public Task<List<PluginGiveawaySummary>?> GetOpenGiveawaysAsync(ulong guildId) =>
+        GetJsonAsync<List<PluginGiveawaySummary>>($"/plugin/giveaways?guild_id={guildId}");
+
+    public Task<List<PluginGiveawaySummary>?> GetConcludedGiveawaysAsync(ulong guildId) =>
+        GetJsonAsync<List<PluginGiveawaySummary>>($"/plugin/giveaways/concluded?guild_id={guildId}");
+
+    public Task<List<PluginRaffleSummary>?> GetOpenRafflesAsync(ulong guildId) =>
+        GetJsonAsync<List<PluginRaffleSummary>>($"/plugin/raffles?guild_id={guildId}");
+
+    public Task<List<PluginRaffleSummary>?> GetConcludedRafflesAsync(ulong guildId) =>
+        GetJsonAsync<List<PluginRaffleSummary>>($"/plugin/raffles/concluded?guild_id={guildId}");
+
+    public Task<List<PluginProfileSummary>?> GetProfilesAsync() =>
+        GetJsonAsync<List<PluginProfileSummary>>("/plugin/profiles");
+
+    public Task<PluginProfileDetail?> GetProfileDetailAsync(int characterId) =>
+        GetJsonAsync<PluginProfileDetail>($"/plugin/profiles/{characterId}");
+
+    public Task<List<PluginProfileSummary>?> GetPendingProfileApprovalsAsync(ulong guildId) =>
+        GetJsonAsync<List<PluginProfileSummary>>($"/plugin/manage/profiles/pending?guild_id={guildId}");
+
+    public Task<PluginProfileDetail?> GetProfileApprovalDetailAsync(ulong guildId, int characterId) =>
+        GetJsonAsync<PluginProfileDetail>($"/plugin/manage/profiles/{characterId}?guild_id={guildId}");
+
+    public Task<bool> ApproveProfileAsync(ulong guildId, int characterId) =>
+        PostOkAsync($"/plugin/manage/profiles/{characterId}/approve?guild_id={guildId}");
+
+    public Task<bool> RejectProfileAsync(ulong guildId, int characterId, string reason) =>
+        PostOkAsync($"/plugin/manage/profiles/{characterId}/reject?guild_id={guildId}", new { reason });
+
+    public Task<List<PluginVipTierSummary>?> GetVipTiersForManageAsync(ulong guildId) =>
+        GetJsonAsync<List<PluginVipTierSummary>>($"/plugin/manage/vip/tiers?guild_id={guildId}");
+
+    public Task<List<PluginVipMemberSummary>?> GetVipMembersForManageAsync(ulong guildId) =>
+        GetJsonAsync<List<PluginVipMemberSummary>>($"/plugin/manage/vip/members?guild_id={guildId}");
+
+    public Task<PluginVipMemberDetail?> GetVipMemberDetailAsync(ulong guildId, int memberId) =>
+        GetJsonAsync<PluginVipMemberDetail>($"/plugin/manage/vip/members/{memberId}?guild_id={guildId}");
+
+    public Task<PluginVipMemberDetail?> AssignVipMemberAsync(ulong guildId, ulong discordUserId, int tierId) =>
+        PutJsonAsync<PluginVipMemberDetail>(
+            $"/plugin/manage/vip/members?guild_id={guildId}",
+            new { discord_user_id = discordUserId, tier_id = tierId }
         );
-        return response.IsSuccessStatusCode;
-    }
 
-    public async Task<bool> RejectProfileAsync(ulong guildId, int characterId, string reason)
+    public Task<bool> RemoveVipMemberAsync(ulong guildId, int memberId) =>
+        DeleteOkAsync($"/plugin/manage/vip/members/{memberId}?guild_id={guildId}");
+
+    public Task<PluginResolveCharacterResponse?> ResolveCharacterAsync(ulong guildId, string characterName, string world)
     {
-        using var response = await httpClient.PostAsJsonAsync(
-            $"/plugin/manage/profiles/{characterId}/reject?guild_id={guildId}", new { reason }, JsonOptions
-        );
-        return response.IsSuccessStatusCode;
+        var query = $"guild_id={guildId}&character_name={Uri.EscapeDataString(characterName)}&world={Uri.EscapeDataString(world)}";
+        return GetJsonAsync<PluginResolveCharacterResponse>($"/plugin/manage/vip/resolve-character?{query}");
     }
 
     public async Task<bool> RevokeAsync()
     {
         try
         {
-            using var response = await httpClient.DeleteAsync("/plugin-auth/me");
-            return response.IsSuccessStatusCode;
+            return await DeleteOkAsync("/plugin-auth/me");
         }
         catch (Exception)
         {

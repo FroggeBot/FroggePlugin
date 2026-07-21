@@ -130,6 +130,40 @@ public partial class MainWindow
         }
     }
 
+    // Renders a VIP tier pick-list, backed by the shared vipTiers/vipTiersLoadState fields
+    // (MainWindow.ManageVip.cs) - reused by both the member-detail "change tier" flow and the
+    // assign-via-target flow, matching DrawGuildPicker's "shared data, per-caller onSelect"
+    // shape. No Back button here (unlike DrawGuildPicker) - this is an inline picker within a
+    // larger screen, not its own Page.
+    private void DrawTierPicker(Action retry, Action<int, string> onSelect)
+    {
+        switch (vipTiersLoadState)
+        {
+            case VipLoadState.Loading:
+                DrawLoading();
+                break;
+
+            case VipLoadState.Error:
+                DrawError(vipTiersErrorMessage, retry);
+                break;
+
+            case VipLoadState.Loaded:
+                if (vipTiers is null || vipTiers.Count == 0)
+                {
+                    DrawEmpty("No VIP tiers configured for this venue yet.");
+                    break;
+                }
+
+                foreach (var tier in vipTiers)
+                {
+                    if (ColoredButton($"{tier.Name} ({tier.Cost:N0})##{tier.Id}", AccentColor, FullWidthButton))
+                        onSelect(tier.Id, tier.Name);
+                    ImGui.Spacing();
+                }
+                break;
+        }
+    }
+
     // Shared by every Fetch*Async method across Vip/Events/Profiles/Giveaways/Raffles.cs - each
     // used to hand-roll the same try/fetch/null-check/catch shape against its own VipLoadState
     // field. `ref`/`out` parameters aren't allowed in async methods, so the per-call state field
