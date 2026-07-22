@@ -100,6 +100,14 @@ public partial class MainWindow
 
         if (ColoredButton("VIP Members", AccentColor, FullWidthButton))
             StartManageVipRoster();
+        ImGui.Spacing();
+
+        if (ColoredButton("Giveaways", AccentColor, FullWidthButton))
+            StartManageGiveawayList();
+        ImGui.Spacing();
+
+        if (ColoredButton("Raffles", AccentColor, FullWidthButton))
+            StartManageRaffleList();
     }
 
     private void StartManageVenue(ulong guildId, string guildName)

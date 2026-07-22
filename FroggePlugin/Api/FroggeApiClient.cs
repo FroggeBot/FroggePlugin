@@ -71,6 +71,35 @@ public sealed record PluginRaffleSummary(
     string? DiscordLink
 );
 
+// Manager-facing summaries carry real winner_ids (a manager legitimately needs to see who won) -
+// the attendee-facing summaries above deliberately hide discord_user_id entirely instead.
+public sealed record PluginManageGiveawaySummary(
+    int Id,
+    ulong GuildId,
+    string? Name,
+    string? Prize,
+    DateTimeOffset? EndAt,
+    int EntrantCount,
+    bool IsRolled,
+    DateTimeOffset? RolledAt,
+    List<ulong> WinnerIds,
+    string? DiscordLink
+);
+
+public sealed record PluginManageRaffleSummary(
+    int Id,
+    ulong GuildId,
+    string? Name,
+    int CostPerTicket,
+    int WinnerPct,
+    int EntrantCount,
+    int TotalTickets,
+    bool IsRolled,
+    DateTimeOffset? RolledAt,
+    List<ulong> WinnerIds,
+    string? DiscordLink
+);
+
 public sealed record PluginProfileSummary(int Id, ulong GuildId, string GuildName, string CharacterName, bool IsPrimary, string ApprovalStatus, string? ThumbnailUrl);
 
 public sealed record PluginProfileImage(string ImageUrl, string? Caption);
@@ -318,8 +347,36 @@ public sealed class FroggeApiClient : IDisposable
     public Task<PluginResolveCharacterResponse?> ResolveCharacterAsync(ulong guildId, string characterName, string world)
     {
         var query = $"guild_id={guildId}&character_name={Uri.EscapeDataString(characterName)}&world={Uri.EscapeDataString(world)}";
-        return GetJsonAsync<PluginResolveCharacterResponse>($"/plugin/manage/vip/resolve-character?{query}");
+        return GetJsonAsync<PluginResolveCharacterResponse>($"/plugin/manage/resolve-character?{query}");
     }
+
+    public Task<List<PluginManageGiveawaySummary>?> GetManageGiveawaysAsync(ulong guildId) =>
+        GetJsonAsync<List<PluginManageGiveawaySummary>>($"/plugin/manage/giveaways?guild_id={guildId}");
+
+    public Task<List<PluginManageGiveawaySummary>?> GetManageGiveawaysConcludedAsync(ulong guildId) =>
+        GetJsonAsync<List<PluginManageGiveawaySummary>>($"/plugin/manage/giveaways/concluded?guild_id={guildId}");
+
+    public Task<PluginManageGiveawaySummary?> RollGiveawayAsync(ulong guildId, int giveawayId, bool force = false) =>
+        PostJsonAsync<PluginManageGiveawaySummary>(
+            $"/plugin/manage/giveaways/{giveawayId}/roll?guild_id={guildId}&force={force}"
+        );
+
+    public Task<List<PluginManageRaffleSummary>?> GetManageRafflesAsync(ulong guildId) =>
+        GetJsonAsync<List<PluginManageRaffleSummary>>($"/plugin/manage/raffles?guild_id={guildId}");
+
+    public Task<List<PluginManageRaffleSummary>?> GetManageRafflesConcludedAsync(ulong guildId) =>
+        GetJsonAsync<List<PluginManageRaffleSummary>>($"/plugin/manage/raffles/concluded?guild_id={guildId}");
+
+    public Task<PluginManageRaffleSummary?> RollRaffleAsync(ulong guildId, int raffleId, bool force = false) =>
+        PostJsonAsync<PluginManageRaffleSummary>(
+            $"/plugin/manage/raffles/{raffleId}/roll?guild_id={guildId}&force={force}"
+        );
+
+    public Task<PluginManageRaffleSummary?> CreditRaffleTicketsAsync(ulong guildId, int raffleId, ulong discordUserId, int quantity) =>
+        PutJsonAsync<PluginManageRaffleSummary>(
+            $"/plugin/manage/raffles/{raffleId}/tickets?guild_id={guildId}",
+            new { discord_user_id = discordUserId, quantity }
+        );
 
     public async Task<bool> RevokeAsync()
     {
