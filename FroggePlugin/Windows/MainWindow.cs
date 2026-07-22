@@ -44,6 +44,9 @@ public partial class MainWindow : Window, IDisposable
         ManageRaffleList,
         ManageRaffleDetail,
         ManageRaffleAssignTarget,
+        ManageStaffingRoster,
+        ManageStaffingMemberDetail,
+        ManageStaffingHireTarget,
         Settings,
     }
 
@@ -169,6 +172,12 @@ public partial class MainWindow : Window, IDisposable
                 DrawManageRaffleDetail(); break;
             case Page.ManageRaffleAssignTarget:
                 DrawManageRaffleAssignTarget(); break;
+            case Page.ManageStaffingRoster:
+                DrawManageStaffingRoster(); break;
+            case Page.ManageStaffingMemberDetail:
+                DrawManageStaffingMemberDetail(); break;
+            case Page.ManageStaffingHireTarget:
+                DrawManageStaffingHireTarget(); break;
             default:
                 DrawHome(); break;
         }

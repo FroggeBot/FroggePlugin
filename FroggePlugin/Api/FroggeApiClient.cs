@@ -100,6 +100,20 @@ public sealed record PluginManageRaffleSummary(
     string? DiscordLink
 );
 
+public sealed record PluginPositionSummary(int Id, string Name);
+
+public sealed record PluginManageStaffMemberSummary(int Id, ulong DiscordUserId, string DisplayName, bool IsTerminated);
+
+public sealed record PluginManageStaffMemberDetail(
+    int Id,
+    ulong DiscordUserId,
+    string DisplayName,
+    bool IsTerminated,
+    string? Birthday,
+    string? Notes,
+    List<PluginPositionSummary> Positions
+);
+
 public sealed record PluginProfileSummary(int Id, ulong GuildId, string GuildName, string CharacterName, bool IsPrimary, string ApprovalStatus, string? ThumbnailUrl);
 
 public sealed record PluginProfileImage(string ImageUrl, string? Caption);
@@ -377,6 +391,40 @@ public sealed class FroggeApiClient : IDisposable
             $"/plugin/manage/raffles/{raffleId}/tickets?guild_id={guildId}",
             new { discord_user_id = discordUserId, quantity }
         );
+
+    public Task<List<PluginManageStaffMemberSummary>?> GetManageStaffingRosterAsync(ulong guildId) =>
+        GetJsonAsync<List<PluginManageStaffMemberSummary>>($"/plugin/manage/staffing/members?guild_id={guildId}");
+
+    public Task<PluginManageStaffMemberDetail?> GetManageStaffMemberDetailAsync(ulong guildId, int memberId) =>
+        GetJsonAsync<PluginManageStaffMemberDetail>($"/plugin/manage/staffing/members/{memberId}?guild_id={guildId}");
+
+    public Task<List<PluginPositionSummary>?> GetManageStaffingPositionsAsync(ulong guildId) =>
+        GetJsonAsync<List<PluginPositionSummary>>($"/plugin/manage/staffing/positions?guild_id={guildId}");
+
+    public Task<PluginManageStaffMemberDetail?> HireStaffMemberAsync(ulong guildId, ulong discordUserId) =>
+        PostJsonAsync<PluginManageStaffMemberDetail>(
+            $"/plugin/manage/staffing/members?guild_id={guildId}",
+            new { discord_user_id = discordUserId }
+        );
+
+    public Task<PluginManageStaffMemberDetail?> TerminateStaffMemberAsync(ulong guildId, int memberId) =>
+        PostJsonAsync<PluginManageStaffMemberDetail>(
+            $"/plugin/manage/staffing/members/{memberId}/terminate?guild_id={guildId}"
+        );
+
+    public Task<PluginManageStaffMemberDetail?> RehireStaffMemberAsync(ulong guildId, int memberId) =>
+        PostJsonAsync<PluginManageStaffMemberDetail>(
+            $"/plugin/manage/staffing/members/{memberId}/rehire?guild_id={guildId}"
+        );
+
+    public Task<PluginManageStaffMemberDetail?> AddStaffQualificationAsync(ulong guildId, int memberId, int positionId) =>
+        PutJsonAsync<PluginManageStaffMemberDetail>(
+            $"/plugin/manage/staffing/members/{memberId}/positions/{positionId}?guild_id={guildId}",
+            new { }
+        );
+
+    public Task<bool> RemoveStaffQualificationAsync(ulong guildId, int memberId, int positionId) =>
+        DeleteOkAsync($"/plugin/manage/staffing/members/{memberId}/positions/{positionId}?guild_id={guildId}");
 
     public async Task<bool> RevokeAsync()
     {
