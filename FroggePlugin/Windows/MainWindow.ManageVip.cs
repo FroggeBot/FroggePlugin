@@ -305,7 +305,7 @@ public partial class MainWindow
 
         var resolving = resolveState == VipLoadState.Loading;
         ImGui.BeginDisabled(resolving);
-        if (ImGui.Button("Use Current Target"))
+        if (ColoredButton("Use Current Target", AccentColor))
             StartResolveTarget();
         ImGui.EndDisabled();
 
@@ -313,7 +313,7 @@ public partial class MainWindow
         switch (resolveState)
         {
             case VipLoadState.Loading:
-                ImGui.TextDisabled("Looking up...");
+                DrawLoading();
                 break;
 
             case VipLoadState.Error:

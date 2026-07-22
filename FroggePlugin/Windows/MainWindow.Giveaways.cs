@@ -49,24 +49,11 @@ public partial class MainWindow
         DrawTitle(selectedGiveawayGuildName);
         ImGui.Spacing();
 
-        if (ColoredButton("Open", showConcludedGiveaways ? MutedColor : AccentColor))
+        DrawFilterTabs("Open", "Concluded", showConcludedGiveaways, showSecond =>
         {
-            if (showConcludedGiveaways)
-            {
-                showConcludedGiveaways = false;
-                StartGiveawayFetch();
-            }
-        }
-        ImGui.SameLine();
-        if (ColoredButton("Concluded", showConcludedGiveaways ? AccentColor : MutedColor))
-        {
-            if (!showConcludedGiveaways)
-            {
-                showConcludedGiveaways = true;
-                StartGiveawayFetch();
-            }
-        }
-        ImGui.Spacing();
+            showConcludedGiveaways = showSecond;
+            StartGiveawayFetch();
+        });
         ImGui.Spacing();
 
         switch (giveawayListLoadState)
@@ -108,13 +95,17 @@ public partial class MainWindow
 
                     ImGui.TextDisabled($"{giveaway.EntrantCount} entrant(s)");
 
+                    var badgeDrawn = false;
                     if (giveaway.IsEntered)
                     {
                         DrawBadge("Entered", AccentColor);
-                        ImGui.SameLine();
+                        badgeDrawn = true;
                     }
                     if (giveaway is { IsRolled: true, IsWinner: true })
+                    {
+                        if (badgeDrawn) ImGui.SameLine();
                         DrawBadge("You Won!", SuccessColor);
+                    }
 
                     if (giveaway.DiscordLink is { } link)
                     {

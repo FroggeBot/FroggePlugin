@@ -2,6 +2,9 @@ using System;
 using System.Numerics;
 using System.Threading.Tasks;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface;
+using Dalamud.Interface.Textures;
+using Dalamud.Interface.Textures.TextureWraps;
 using Dalamud.Utility;
 using FroggePlugin.Api;
 
@@ -17,7 +20,10 @@ public partial class MainWindow
     // these is confirmed by a successful build, not just assumed.
 
     private static readonly Vector4 AccentColor = new(0.40f, 0.82f, 0.55f, 1.00f);
-    private static readonly Vector4 SuccessColor = new(0.40f, 0.82f, 0.55f, 1.00f);
+    // Deliberately distinct from AccentColor (previously the exact same value) - a genuine
+    // positive-state signal (Join, Rehire, Fully Redeemed, You Won!, Current) should read as
+    // different from a plain brand/navigation button, not be invisibly identical to one.
+    private static readonly Vector4 SuccessColor = new(0.35f, 0.90f, 0.42f, 1.00f);
     private static readonly Vector4 WarningColor = new(0.95f, 0.75f, 0.20f, 1.00f);
     private static readonly Vector4 DangerColor = new(0.92f, 0.38f, 0.38f, 1.00f);
     private static readonly Vector4 MutedColor = new(0.63f, 0.63f, 0.66f, 1.00f);
@@ -63,6 +69,121 @@ public partial class MainWindow
         return ColoredButton("< Back", MutedColor);
     }
 
+    // A purely decorative icon glyph (Dalamud's built-in FontAwesome icon font, confirmed against
+    // the real installed Dalamud.dll via a reflection probe before use) placed immediately before
+    // a full-width button on the same line via SameLine() - not part of the button's own hitbox,
+    // so this can't change click behavior, only how the row looks. Home screen only; the icon font
+    // is icon-glyphs-only (no letters), so it can't be mixed into a button's own label text.
+    private static void DrawIconLabel(FontAwesomeIcon icon, Vector4 color)
+    {
+        ImGui.PushFont(Plugin.PluginInterface.UiBuilder.FontIcon);
+        ImGui.TextColored(color, icon.ToIconString());
+        ImGui.PopFont();
+        ImGui.SameLine();
+    }
+
+    // --- Placeholder images ------------------------------------------------------------
+    // A demo/stand-in for real remote image rendering (fetching a URL and uploading it as a
+    // texture), which this plugin doesn't have yet - these are synthesized entirely in memory
+    // (no bundled asset files) via ITextureProvider.CreateFromRaw, confirmed against the real
+    // installed Dalamud.dll: RawImageSpecification.Rgba32(w, h) handles the pixel format/pitch,
+    // CreateFromRaw takes a plain RGBA byte buffer. Created once and cached - IDalamudTextureWrap
+    // holds a real GPU texture and must be disposed (see MainWindow.Dispose()).
+    private static IDalamudTextureWrap? placeholderAvatarTexture;
+    private static IDalamudTextureWrap? placeholderBannerTexture;
+
+    private static IDalamudTextureWrap GetPlaceholderAvatarTexture()
+    {
+        if (placeholderAvatarTexture is not null)
+            return placeholderAvatarTexture;
+
+        const int size = 128;
+        var pixels = new byte[size * size * 4];
+        var (bgR, bgG, bgB) = ((byte)30, (byte)32, (byte)30);
+        var (fgR, fgG, fgB) = ((byte)(AccentColor.X * 255), (byte)(AccentColor.Y * 255), (byte)(AccentColor.Z * 255));
+
+        // A simple default-avatar glyph: a head circle over a shoulders circle clipped by the
+        // bottom edge - the same shape every chat app's "no profile picture" placeholder uses.
+        var cx = size / 2f;
+        var headCy = size * 0.38f;
+        var headR = size * 0.16f;
+        var shoulderCy = size * 1.05f;
+        var shoulderR = size * 0.46f;
+
+        for (var y = 0; y < size; y++)
+        {
+            for (var x = 0; x < size; x++)
+            {
+                var dxHead = x - cx;
+                var dyHead = y - headCy;
+                var inHead = dxHead * dxHead + dyHead * dyHead <= headR * headR;
+
+                var dxShoulder = x - cx;
+                var dyShoulder = y - shoulderCy;
+                var inShoulders = dxShoulder * dxShoulder + dyShoulder * dyShoulder <= shoulderR * shoulderR;
+
+                var idx = (y * size + x) * 4;
+                if (inHead || inShoulders)
+                {
+                    pixels[idx] = fgR;
+                    pixels[idx + 1] = fgG;
+                    pixels[idx + 2] = fgB;
+                }
+                else
+                {
+                    pixels[idx] = bgR;
+                    pixels[idx + 1] = bgG;
+                    pixels[idx + 2] = bgB;
+                }
+                pixels[idx + 3] = 255;
+            }
+        }
+
+        placeholderAvatarTexture = Plugin.TextureProvider.CreateFromRaw(
+            RawImageSpecification.Rgba32(size, size), pixels, "FroggePlaceholderAvatar"
+        );
+        return placeholderAvatarTexture;
+    }
+
+    private static IDalamudTextureWrap GetPlaceholderBannerTexture()
+    {
+        if (placeholderBannerTexture is not null)
+            return placeholderBannerTexture;
+
+        const int width = 256;
+        const int height = 96;
+        var pixels = new byte[width * height * 4];
+
+        for (var y = 0; y < height; y++)
+        {
+            var t = y / (float)(height - 1);
+            var r = (byte)((AccentColor.X * (1 - t * 0.6f)) * 255);
+            var g = (byte)((AccentColor.Y * (1 - t * 0.6f)) * 255);
+            var b = (byte)((AccentColor.Z * (1 - t * 0.6f)) * 255);
+            for (var x = 0; x < width; x++)
+            {
+                var idx = (y * width + x) * 4;
+                pixels[idx] = r;
+                pixels[idx + 1] = g;
+                pixels[idx + 2] = b;
+                pixels[idx + 3] = 255;
+            }
+        }
+
+        placeholderBannerTexture = Plugin.TextureProvider.CreateFromRaw(
+            RawImageSpecification.Rgba32(width, height), pixels, "FroggePlaceholderBanner"
+        );
+        return placeholderBannerTexture;
+    }
+
+    private static void DisposePlaceholderTextures()
+    {
+        placeholderAvatarTexture?.Dispose();
+        placeholderBannerTexture?.Dispose();
+        placeholderAvatarTexture = null;
+        placeholderBannerTexture = null;
+    }
+
     // The API returns plain https://discord.com/... links (general-purpose, works as a browser
     // fallback too). Rewriting to discord:// here - not server-side - is deliberate: Discord's
     // desktop client registers discord:// as a real OS-level URL protocol handler (confirmed via
@@ -85,6 +206,20 @@ public partial class MainWindow
     }
 
     private static void DrawEmpty(string message) => ImGui.TextDisabled(message);
+
+    // A two-segment "Open"/"Concluded"-style filter toggle - factors out the identical
+    // hand-rolled pattern previously duplicated in Giveaways.cs/Raffles.cs/ManageGiveaways.cs/
+    // ManageRaffles.cs. `onChange` fires with the new `showingSecond` value only on an actual
+    // change - clicking the already-active side is a no-op, matching every call site's existing
+    // behavior of only re-fetching when the toggle genuinely flips.
+    private static void DrawFilterTabs(string firstLabel, string secondLabel, bool showingSecond, Action<bool> onChange)
+    {
+        if (ColoredButton(firstLabel, showingSecond ? MutedColor : AccentColor) && showingSecond)
+            onChange(false);
+        ImGui.SameLine();
+        if (ColoredButton(secondLabel, showingSecond ? AccentColor : MutedColor) && !showingSecond)
+            onChange(true);
+    }
 
     // Shared by DrawGiveaways()/DrawRaffles() - both screens are just "pick a linked venue,
     // then go somewhere feature-specific," backed by the same guildsLoadState/guilds fields
@@ -249,9 +384,15 @@ public partial class MainWindow
         ImGui.Dummy(new Vector2(0, 4));
         ImGui.EndGroup();
 
+        var color = borderColor ?? MutedColor;
         var min = ImGui.GetItemRectMin();
         var max = new Vector2(min.X + cardContentWidth, ImGui.GetItemRectMax().Y);
-        ImGui.GetWindowDrawList().AddRect(min, max, ImGui.GetColorU32(borderColor ?? MutedColor), 4f);
+        var drawList = ImGui.GetWindowDrawList();
+        // A subtle tint of the border color behind the content, drawn first so the border and
+        // card content sit on top - gives every card real visual depth instead of a flat outline
+        // on the window background, and reinforces the border's own color-coding.
+        drawList.AddRectFilled(min, max, ImGui.GetColorU32(new Vector4(color.X, color.Y, color.Z, 0.08f)), 6f);
+        drawList.AddRect(min, max, ImGui.GetColorU32(color), 6f);
         ImGui.Spacing();
     }
 
@@ -405,14 +546,25 @@ public partial class MainWindow
 
         if (p.ThumbnailUrl is not null || p.MainImageUrl is not null || p.AdditionalImages.Count > 0)
         {
-            // Actual image rendering (fetching + texture-uploading a remote URL) is a
-            // real separate capability this plugin doesn't have yet - deliberately out
-            // of scope for a styling pass, same as event image_url. URLs stay as text.
+            // Actual remote image rendering (fetching + texture-uploading a real URL) is still
+            // a separate capability this plugin doesn't have - these are static placeholder
+            // textures standing in for where a real thumbnail/main image would render, synthesized
+            // in memory (see GetPlaceholderAvatarTexture/GetPlaceholderBannerTexture above).
             DrawSectionHeader("Images");
             if (p.ThumbnailUrl is not null)
-                DrawInlineField("Thumbnail", p.ThumbnailUrl);
+            {
+                var avatar = GetPlaceholderAvatarTexture();
+                ImGui.Image(avatar.Handle, new Vector2(64, 64));
+                ImGui.SameLine();
+                ImGui.TextDisabled("Thumbnail (placeholder)");
+            }
             if (p.MainImageUrl is not null)
-                DrawInlineField("Main Image", p.MainImageUrl);
+            {
+                var banner = GetPlaceholderBannerTexture();
+                ImGui.Spacing();
+                ImGui.TextDisabled("Main Image (placeholder)");
+                ImGui.Image(banner.Handle, new Vector2(Math.Min(ImGui.GetContentRegionAvail().X, 256), 96));
+            }
             foreach (var image in p.AdditionalImages)
                 DrawInlineField(image.Caption ?? "Image", image.ImageUrl);
         }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.Threading.Tasks;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface;
 using Dalamud.Interface.Windowing;
 using FroggePlugin.Api;
 
@@ -91,7 +92,7 @@ public partial class MainWindow : Window, IDisposable
         this.plugin = plugin;
     }
 
-    public void Dispose() { }
+    public void Dispose() => DisposePlaceholderTextures();
 
     public override void Draw()
     {
@@ -106,8 +107,9 @@ public partial class MainWindow : Window, IDisposable
             state = LinkState.Idle;
         }
 
-        DrawTitle("Frogge");
-        ImGui.Separator();
+        // Every sub-screen already draws its own Separator()+Spacing() right after its Back
+        // button - the native Dalamud window titlebar already reads "Frogge," so a second
+        // title+separator here would just duplicate it. This is only a small breathing-room gap.
         ImGui.Spacing();
 
         // Reachable regardless of link state - fixing a bad ApiBaseUrl is exactly the scenario
@@ -192,26 +194,32 @@ public partial class MainWindow : Window, IDisposable
         ImGui.Spacing();
         ImGui.Spacing();
 
+        DrawIconLabel(FontAwesomeIcon.Crown, AccentColor);
         if (ColoredButton("VIP Status", AccentColor, FullWidthButton))
             StartVipStatus();
         ImGui.Spacing();
 
+        DrawIconLabel(FontAwesomeIcon.Calendar, AccentColor);
         if (ColoredButton("Events", AccentColor, FullWidthButton))
             StartEvents();
         ImGui.Spacing();
 
+        DrawIconLabel(FontAwesomeIcon.IdCard, AccentColor);
         if (ColoredButton("Profiles", AccentColor, FullWidthButton))
             StartProfiles();
         ImGui.Spacing();
 
+        DrawIconLabel(FontAwesomeIcon.Gift, AccentColor);
         if (ColoredButton("Giveaways", AccentColor, FullWidthButton))
             StartGiveaways();
         ImGui.Spacing();
 
+        DrawIconLabel(FontAwesomeIcon.Ticket, AccentColor);
         if (ColoredButton("Raffles", AccentColor, FullWidthButton))
             StartRaffles();
         ImGui.Spacing();
 
+        DrawIconLabel(FontAwesomeIcon.Cogs, AccentColor);
         if (ColoredButton("Manage", AccentColor, FullWidthButton))
             StartManage();
 

@@ -40,24 +40,11 @@ public partial class MainWindow
         DrawTitle($"{selectedManageGuildName} - Giveaways");
         ImGui.Spacing();
 
-        if (ColoredButton("Open", showConcludedManageGiveaways ? MutedColor : AccentColor))
+        DrawFilterTabs("Open", "Concluded", showConcludedManageGiveaways, showSecond =>
         {
-            if (showConcludedManageGiveaways)
-            {
-                showConcludedManageGiveaways = false;
-                StartManageGiveawayFetch();
-            }
-        }
-        ImGui.SameLine();
-        if (ColoredButton("Concluded", showConcludedManageGiveaways ? AccentColor : MutedColor))
-        {
-            if (!showConcludedManageGiveaways)
-            {
-                showConcludedManageGiveaways = true;
-                StartManageGiveawayFetch();
-            }
-        }
-        ImGui.Spacing();
+            showConcludedManageGiveaways = showSecond;
+            StartManageGiveawayFetch();
+        });
         ImGui.Spacing();
 
         switch (manageGiveawayListLoadState)
