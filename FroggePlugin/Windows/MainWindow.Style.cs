@@ -378,7 +378,7 @@ public partial class MainWindow
         ImGui.Indent();
     }
 
-    private void EndCard(Vector4? borderColor = null)
+    private void EndCard(Vector4? borderColor = null, bool leftAccentStripe = false)
     {
         ImGui.Unindent();
         ImGui.Dummy(new Vector2(0, 4));
@@ -393,6 +393,21 @@ public partial class MainWindow
         // on the window background, and reinforces the border's own color-coding.
         drawList.AddRectFilled(min, max, ImGui.GetColorU32(new Vector4(color.X, color.Y, color.Z, 0.08f)), 6f);
         drawList.AddRect(min, max, ImGui.GetColorU32(color), 6f);
+
+        if (leftAccentStripe)
+        {
+            // A solid colored left-edge bar, mimicking a classic Discord embed's accent stripe -
+            // opt-in per call (Profile Detail only, so far), not a default for every card, since
+            // this is a deliberate "embed style" look for one screen, not a general card treatment.
+            // Inset slightly and given its own small radius so it sits cleanly inside the card's
+            // own rounded border instead of clashing at the corners.
+            const float stripeWidth = 4f;
+            const float inset = 3f;
+            var stripeMin = new Vector2(min.X + inset, min.Y + inset);
+            var stripeMax = new Vector2(min.X + inset + stripeWidth, max.Y - inset);
+            drawList.AddRectFilled(stripeMin, stripeMax, ImGui.GetColorU32(color), 2f);
+        }
+
         ImGui.Spacing();
     }
 

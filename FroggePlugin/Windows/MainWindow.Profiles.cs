@@ -116,7 +116,7 @@ public partial class MainWindow
                 var p = profileDetail;
                 BeginCard();
                 DrawProfileContent(p);
-                EndCard(ApprovalStatusColor(p.ApprovalStatus));
+                EndCard(ApprovalStatusColor(p.ApprovalStatus), leftAccentStripe: true);
                 break;
         }
     }
