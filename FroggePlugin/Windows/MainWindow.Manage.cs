@@ -108,6 +108,10 @@ public partial class MainWindow
 
         if (ColoredButton("Raffles", AccentColor, FullWidthButton))
             StartManageRaffleList();
+        ImGui.Spacing();
+
+        if (ColoredButton("Staffing", AccentColor, FullWidthButton))
+            StartManageStaffingRoster();
     }
 
     private void StartManageVenue(ulong guildId, string guildName)

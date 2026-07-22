@@ -164,6 +164,38 @@ public partial class MainWindow
         }
     }
 
+    // Mirrors DrawTierPicker exactly, backed by MainWindow.ManageStaffing.cs's own
+    // staffingPositions/staffingPositionsLoadState fields (not shared with vipTiers - a
+    // different picker, different data).
+    private void DrawPositionPicker(Action retry, Action<int, string> onSelect)
+    {
+        switch (staffingPositionsLoadState)
+        {
+            case VipLoadState.Loading:
+                DrawLoading();
+                break;
+
+            case VipLoadState.Error:
+                DrawError(staffingPositionsErrorMessage, retry);
+                break;
+
+            case VipLoadState.Loaded:
+                if (staffingPositions is null || staffingPositions.Count == 0)
+                {
+                    DrawEmpty("No positions configured for this venue yet.");
+                    break;
+                }
+
+                foreach (var position in staffingPositions)
+                {
+                    if (ColoredButton($"{position.Name}##{position.Id}", AccentColor, FullWidthButton))
+                        onSelect(position.Id, position.Name);
+                    ImGui.Spacing();
+                }
+                break;
+        }
+    }
+
     // Shared by every Fetch*Async method across Vip/Events/Profiles/Giveaways/Raffles.cs - each
     // used to hand-roll the same try/fetch/null-check/catch shape against its own VipLoadState
     // field. `ref`/`out` parameters aren't allowed in async methods, so the per-call state field
