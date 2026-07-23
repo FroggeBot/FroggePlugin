@@ -92,7 +92,7 @@ public partial class MainWindow : Window, IDisposable
         this.plugin = plugin;
     }
 
-    public void Dispose() => DisposePlaceholderTextures();
+    public void Dispose() => DisposeImageResources();
 
     public override void Draw()
     {

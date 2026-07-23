@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Net.Http;
 using System.Numerics;
 using System.Threading.Tasks;
 using Dalamud.Bindings.ImGui;
@@ -176,12 +178,71 @@ public partial class MainWindow
         return placeholderBannerTexture;
     }
 
-    private static void DisposePlaceholderTextures()
+    // --- Remote image fetching ---------------------------------------------------------
+    // Real remote image rendering: fetches a URL's bytes and uploads them as a texture, caching
+    // by URL so the same image isn't re-fetched every frame. Falls back to a placeholder texture
+    // while loading or on failure - never blocks rendering, matches the exact "background task
+    // writes plain fields, Draw() reads next frame" discipline already established throughout
+    // this codebase (see MainWindow.cs's pendingResult). No LRU/cache-size bound and no automatic
+    // retry on failure - accepted v1 limitations, not oversights.
+
+    private enum RemoteImageState { Loading, Loaded, Failed }
+
+    private sealed class RemoteImageEntry
+    {
+        public RemoteImageState State = RemoteImageState.Loading;
+        public IDalamudTextureWrap? Texture;
+    }
+
+    private static readonly Dictionary<string, RemoteImageEntry> remoteImageCache = new();
+
+    // A dedicated client for fetching arbitrary external image URLs - FroggeApiClient's own
+    // httpClient is fixed to the Frogge API's base address and carries a Bearer token meant for
+    // that API, not for arbitrary remote hosts. Long-lived singleton per .NET's own HttpClient
+    // guidance (never create one per-request) - disposed once, alongside the texture cache.
+    private static readonly HttpClient imageHttpClient = new() { Timeout = TimeSpan.FromSeconds(10) };
+
+    private static (IDalamudTextureWrap Texture, RemoteImageState State) GetRemoteOrPlaceholderTexture(
+        string url, IDalamudTextureWrap placeholder)
+    {
+        if (!remoteImageCache.TryGetValue(url, out var entry))
+        {
+            entry = new RemoteImageEntry();
+            remoteImageCache[url] = entry;
+            _ = FetchRemoteImageAsync(url, entry);
+        }
+        return entry.State == RemoteImageState.Loaded && entry.Texture is not null
+            ? (entry.Texture, entry.State)
+            : (placeholder, entry.State);
+    }
+
+    private static async Task FetchRemoteImageAsync(string url, RemoteImageEntry entry)
+    {
+        try
+        {
+            var bytes = await imageHttpClient.GetByteArrayAsync(url);
+            entry.Texture = await Plugin.TextureProvider.CreateFromImageAsync(bytes, url);
+            entry.State = RemoteImageState.Loaded;
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Warning($"Failed to fetch remote image {url}: {ex.Message}");
+            entry.State = RemoteImageState.Failed;
+        }
+    }
+
+    private static void DisposeImageResources()
     {
         placeholderAvatarTexture?.Dispose();
         placeholderBannerTexture?.Dispose();
         placeholderAvatarTexture = null;
         placeholderBannerTexture = null;
+
+        foreach (var entry in remoteImageCache.Values)
+            entry.Texture?.Dispose();
+        remoteImageCache.Clear();
+
+        imageHttpClient.Dispose();
     }
 
     // The API returns plain https://discord.com/... links (general-purpose, works as a browser
@@ -561,23 +622,29 @@ public partial class MainWindow
 
         if (p.ThumbnailUrl is not null || p.MainImageUrl is not null || p.AdditionalImages.Count > 0)
         {
-            // Actual remote image rendering (fetching + texture-uploading a real URL) is still
-            // a separate capability this plugin doesn't have - these are static placeholder
-            // textures standing in for where a real thumbnail/main image would render, synthesized
-            // in memory (see GetPlaceholderAvatarTexture/GetPlaceholderBannerTexture above).
             DrawSectionHeader("Images");
             if (p.ThumbnailUrl is not null)
             {
-                var avatar = GetPlaceholderAvatarTexture();
+                var (avatar, avatarState) = GetRemoteOrPlaceholderTexture(p.ThumbnailUrl, GetPlaceholderAvatarTexture());
                 ImGui.Image(avatar.Handle, new Vector2(64, 64));
                 ImGui.SameLine();
-                ImGui.TextDisabled("Thumbnail (placeholder)");
+                ImGui.TextDisabled(avatarState switch
+                {
+                    RemoteImageState.Loading => "Loading thumbnail...",
+                    RemoteImageState.Failed => "Thumbnail unavailable",
+                    _ => "",
+                });
             }
             if (p.MainImageUrl is not null)
             {
-                var banner = GetPlaceholderBannerTexture();
+                var (banner, bannerState) = GetRemoteOrPlaceholderTexture(p.MainImageUrl, GetPlaceholderBannerTexture());
                 ImGui.Spacing();
-                ImGui.TextDisabled("Main Image (placeholder)");
+                ImGui.TextDisabled(bannerState switch
+                {
+                    RemoteImageState.Loading => "Loading main image...",
+                    RemoteImageState.Failed => "Main image unavailable",
+                    _ => "",
+                });
                 ImGui.Image(banner.Handle, new Vector2(Math.Min(ImGui.GetContentRegionAvail().X, 256), 96));
             }
             foreach (var image in p.AdditionalImages)
