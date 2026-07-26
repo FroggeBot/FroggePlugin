@@ -47,6 +47,9 @@ public partial class MainWindow : Window, IDisposable
         ManageStaffingRoster,
         ManageStaffingMemberDetail,
         ManageStaffingHireTarget,
+        ManageEventList,
+        ManageEventDetail,
+        ManageEventAssignSignupTarget,
         Settings,
     }
 
@@ -178,6 +181,12 @@ public partial class MainWindow : Window, IDisposable
                 DrawManageStaffingMemberDetail(); break;
             case Page.ManageStaffingHireTarget:
                 DrawManageStaffingHireTarget(); break;
+            case Page.ManageEventList:
+                DrawManageEventList(); break;
+            case Page.ManageEventDetail:
+                DrawManageEventDetail(); break;
+            case Page.ManageEventAssignSignupTarget:
+                DrawManageEventAssignSignupTarget(); break;
             default:
                 DrawHome(); break;
         }

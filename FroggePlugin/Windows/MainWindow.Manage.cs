@@ -112,6 +112,10 @@ public partial class MainWindow
 
         if (ColoredButton("Staffing", AccentColor, FullWidthButton))
             StartManageStaffingRoster();
+        ImGui.Spacing();
+
+        if (ColoredButton("Events", AccentColor, FullWidthButton))
+            StartManageEventList();
     }
 
     private void StartManageVenue(ulong guildId, string guildName)
