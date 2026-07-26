@@ -114,6 +114,26 @@ public sealed record PluginManageStaffMemberDetail(
     List<PluginPositionSummary> Positions
 );
 
+public sealed record PluginManageEventSummary(
+    int Id, ulong GuildId, string Name, string? Description, DateTimeOffset StartAt, DateTimeOffset? EndAt, string? ImageUrl
+);
+
+public sealed record PluginManageShiftDetail(int Id, DateTimeOffset StartAt, DateTimeOffset EndAt, int Capacity, List<ulong> Signups);
+
+public sealed record PluginManagePositionDetail(int Id, int PositionId, string PositionName, List<PluginManageShiftDetail> Shifts);
+
+public sealed record PluginManageEventDetail(
+    int Id,
+    ulong GuildId,
+    string Name,
+    string? Description,
+    DateTimeOffset StartAt,
+    DateTimeOffset? EndAt,
+    string? ImageUrl,
+    string? Address,
+    List<PluginManagePositionDetail> Positions
+);
+
 public sealed record PluginProfileSummary(int Id, ulong GuildId, string GuildName, string CharacterName, bool IsPrimary, string ApprovalStatus, string? ThumbnailUrl);
 
 public sealed record PluginProfileImage(string ImageUrl, string? Caption);
@@ -266,6 +286,16 @@ public sealed class FroggeApiClient : IDisposable
     {
         using var content = JsonContent.Create(payload, options: JsonOptions);
         var (success, body) = await SendAsync(HttpMethod.Put, url, content);
+        return success ? Deserialize<T>(url, body) : default;
+    }
+
+    // Matches this codebase's own PATCH-for-partial-update convention (update_event/
+    // update_event_shift on the API side) - added specifically for Events Management rather than
+    // downgrading a PATCH endpoint to PUT just to reuse the existing helper.
+    private async Task<T?> PatchJsonAsync<T>(string url, object payload)
+    {
+        using var content = JsonContent.Create(payload, options: JsonOptions);
+        var (success, body) = await SendAsync(HttpMethod.Patch, url, content);
         return success ? Deserialize<T>(url, body) : default;
     }
 
@@ -425,6 +455,52 @@ public sealed class FroggeApiClient : IDisposable
 
     public Task<bool> RemoveStaffQualificationAsync(ulong guildId, int memberId, int positionId) =>
         DeleteOkAsync($"/plugin/manage/staffing/members/{memberId}/positions/{positionId}?guild_id={guildId}");
+
+    public Task<List<PluginManageEventSummary>?> GetManageEventsAsync(ulong guildId) =>
+        GetJsonAsync<List<PluginManageEventSummary>>($"/plugin/manage/events?guild_id={guildId}");
+
+    public Task<PluginManageEventDetail?> GetManageEventDetailAsync(ulong guildId, int eventId) =>
+        GetJsonAsync<PluginManageEventDetail>($"/plugin/manage/events/{eventId}?guild_id={guildId}");
+
+    public Task<PluginManageEventDetail?> CreateManageEventAsync(ulong guildId, string name) =>
+        PostJsonAsync<PluginManageEventDetail>($"/plugin/manage/events?guild_id={guildId}", new { name });
+
+    // `payload` should only carry the field(s) actually being edited (e.g. `new { description = text }`)
+    // - the API applies it via Pydantic's exclude_unset, so any field genuinely absent from this
+    // object is left untouched server-side, not overwritten to null.
+    public Task<PluginManageEventDetail?> UpdateManageEventAsync(ulong guildId, int eventId, object payload) =>
+        PatchJsonAsync<PluginManageEventDetail>($"/plugin/manage/events/{eventId}?guild_id={guildId}", payload);
+
+    public Task<bool> DeleteManageEventAsync(ulong guildId, int eventId) =>
+        DeleteOkAsync($"/plugin/manage/events/{eventId}?guild_id={guildId}");
+
+    public Task<List<PluginPositionSummary>?> GetEventCatalogPositionsAsync(ulong guildId) =>
+        GetJsonAsync<List<PluginPositionSummary>>($"/plugin/manage/events/positions/catalog?guild_id={guildId}");
+
+    public Task<PluginManagePositionDetail?> AttachEventPositionAsync(ulong guildId, int eventId, int positionId) =>
+        PostJsonAsync<PluginManagePositionDetail>(
+            $"/plugin/manage/events/{eventId}/positions?guild_id={guildId}", new { position_id = positionId }
+        );
+
+    public Task<bool> DetachEventPositionAsync(ulong guildId, int eventPositionId) =>
+        DeleteOkAsync($"/plugin/manage/events/positions/{eventPositionId}?guild_id={guildId}");
+
+    public Task<PluginManageShiftDetail?> CreateManageShiftAsync(ulong guildId, int eventPositionId) =>
+        PostJsonAsync<PluginManageShiftDetail>($"/plugin/manage/events/positions/{eventPositionId}/shifts?guild_id={guildId}");
+
+    public Task<PluginManageShiftDetail?> UpdateShiftCapacityAsync(ulong guildId, int shiftId, int capacity) =>
+        PatchJsonAsync<PluginManageShiftDetail>($"/plugin/manage/events/shifts/{shiftId}/capacity?guild_id={guildId}", new { capacity });
+
+    public Task<bool> DeleteManageShiftAsync(ulong guildId, int shiftId) =>
+        DeleteOkAsync($"/plugin/manage/events/shifts/{shiftId}?guild_id={guildId}");
+
+    public Task<PluginManageShiftDetail?> AssignEventSignupAsync(ulong guildId, int shiftId, ulong discordUserId) =>
+        PostJsonAsync<PluginManageShiftDetail>(
+            $"/plugin/manage/events/shifts/{shiftId}/signups?guild_id={guildId}", new { discord_user_id = discordUserId }
+        );
+
+    public Task<bool> RemoveEventSignupAsync(ulong guildId, int shiftId, ulong discordUserId) =>
+        DeleteOkAsync($"/plugin/manage/events/shifts/{shiftId}/signups/{discordUserId}?guild_id={guildId}");
 
     public async Task<bool> RevokeAsync()
     {
