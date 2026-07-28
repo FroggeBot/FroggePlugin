@@ -21,11 +21,12 @@ public partial class MainWindow : Window, IDisposable
     private enum Page
     {
         Home,
+        AttendingVenues,
+        WorkAtVenue,
         VipStatus,
         VipHistory,
         VipPerks,
         Events,
-        EventList,
         EventDetail,
         Profiles,
         ProfileDetail,
@@ -129,6 +130,10 @@ public partial class MainWindow : Window, IDisposable
         }
         else switch (page)
         {
+            case Page.AttendingVenues:
+                DrawAttendingVenues(); break;
+            case Page.WorkAtVenue:
+                DrawWorkAtVenue(); break;
             case Page.VipStatus:
                 DrawVipStatus(); break;
             case Page.VipHistory:
@@ -137,8 +142,6 @@ public partial class MainWindow : Window, IDisposable
                 DrawVipPerks(); break;
             case Page.Events:
                 DrawEvents(); break;
-            case Page.EventList:
-                DrawEventList(); break;
             case Page.EventDetail:
                 DrawEventDetail(); break;
             case Page.Profiles:
@@ -194,19 +197,25 @@ public partial class MainWindow : Window, IDisposable
         }
     }
 
-    // Static, server-driven menu - no drag/reorder, so a fixed grid is all that's needed here
-    // (unlike a genuine customizable-home-screen plugin, which would need real bin-packing/
-    // drag-state machinery for this same visual shape). See MainWindow.Motion.cs's attribution
-    // note - the icon-tile-grid concept was inspired by, not copied from, another plugin's home
-    // screen; this grid and DrawHomeTile below are an original implementation.
-    private static readonly (string Id, FontAwesomeIcon Icon, string Label)[] HomeTiles =
+    // Root "what do you want to do" menu - a role choice, not a feature list. Each option leads
+    // to its own sub-menu (Manage -> the existing venue-manager guild picker; Attending -> the
+    // former flat feature grid, now one level deeper; Work -> not built yet, see DrawWorkAtVenue).
+    private static readonly (string Id, FontAwesomeIcon Icon, string Label)[] RootTiles =
+    {
+        ("roottile:manage", FontAwesomeIcon.Cogs, "Venue Manager"),
+        ("roottile:work", FontAwesomeIcon.Briefcase, "Venue Employee"),
+        ("roottile:attend", FontAwesomeIcon.Users, "Venue Attendee"),
+    };
+
+    // The member-facing feature set - formerly Home's own tile grid, demoted one level under
+    // "Attending Venues" now that Home is a role-select screen rather than a flat feature list.
+    private static readonly (string Id, FontAwesomeIcon Icon, string Label)[] AttendingTiles =
     {
         ("hometile:vip", FontAwesomeIcon.Crown, "VIP Status"),
         ("hometile:events", FontAwesomeIcon.Calendar, "Events"),
         ("hometile:profiles", FontAwesomeIcon.IdCard, "Profiles"),
         ("hometile:giveaways", FontAwesomeIcon.Gift, "Giveaways"),
         ("hometile:raffles", FontAwesomeIcon.Ticket, "Raffles"),
-        ("hometile:manage", FontAwesomeIcon.Cogs, "Manage"),
     };
 
     private void DrawHome()
@@ -215,67 +224,53 @@ public partial class MainWindow : Window, IDisposable
             ?? plugin.Configuration.LinkedDiscordUserId?.ToString()
             ?? "Unknown";
         ImGui.TextDisabled($"Linked as {label}");
+
+        // Right-justify Settings on the same line as the text above - GetContentRegionMax() is
+        // already in the same window-local coordinate space SameLine's offset_from_start_x
+        // expects, so no extra conversion is needed.
+        const string settingsLabel = "Settings";
+        var settingsWidth = ImGui.CalcTextSize(settingsLabel).X + ImGui.GetStyle().FramePadding.X * 2f;
+        ImGui.SameLine(ImGui.GetContentRegionMax().X - settingsWidth);
+        if (ColoredButton(settingsLabel, MutedColor))
+            StartSettings();
+
         ImGui.Spacing();
+        ImGui.Spacing();
+        ImGui.TextDisabled("What role will you be playing tonight?");
         ImGui.Spacing();
 
+        // Large squares in one horizontal row - exactly 3 role choices, one per column, no
+        // wrapping logic needed the way the multi-row Attending Venues grid needs.
         const int columns = 3;
         var avail = ImGui.GetContentRegionAvail().X;
         var spacing = ImGui.GetStyle().ItemSpacing.X;
-        var tileSize = Math.Clamp((avail - spacing * (columns - 1)) / columns, 60f, 160f);
+        var tileSize = (avail - spacing * (columns - 1)) / columns;
 
-        for (var i = 0; i < HomeTiles.Length; i++)
+        for (var i = 0; i < RootTiles.Length; i++)
         {
-            var (id, icon, tileLabel) = HomeTiles[i];
-            if (DrawHomeTile(id, icon, tileLabel, tileSize))
+            var (id, icon, tileLabel) = RootTiles[i];
+            if (DrawSquareTile(id, icon, tileLabel, tileSize))
             {
                 switch (id)
                 {
-                    case "hometile:vip": StartVipStatus(); break;
-                    case "hometile:events": StartEvents(); break;
-                    case "hometile:profiles": StartProfiles(); break;
-                    case "hometile:giveaways": StartGiveaways(); break;
-                    case "hometile:raffles": StartRaffles(); break;
-                    case "hometile:manage": StartManage(); break;
+                    case "roottile:manage": StartManage(); break;
+                    case "roottile:work": StartWorkAtVenue(); break;
+                    case "roottile:attend": StartAttendingVenues(); break;
                 }
             }
-            if (i % columns != columns - 1 && i != HomeTiles.Length - 1)
+            if (i != RootTiles.Length - 1)
                 ImGui.SameLine();
-        }
-
-        ImGui.Spacing();
-        ImGui.Separator();
-        ImGui.Spacing();
-
-        if (ColoredButton("Settings", MutedColor, FullWidthButton))
-            StartSettings();
-        ImGui.Spacing();
-
-        if (ColoredButton("Forget", DangerColor, FullWidthButton))
-        {
-            plugin.Configuration.AuthToken = null;
-            plugin.Configuration.LinkedDiscordUserId = null;
-            plugin.Configuration.LinkedDiscordUsername = null;
-            plugin.Configuration.Save();
-            plugin.ApiClient.SetAuthToken(null);
-
-            // Best-effort server-side revoke; RevokeAsync swallows its own exceptions, and local
-            // state above is already authoritative for the UI regardless of the outcome.
-            _ = plugin.ApiClient.RevokeAsync();
         }
     }
 
-    // Reserve (InvisibleButton) -> query (IsItemHovered/Active, GetItemRectMin/Max) -> draw, all
-    // before any other widget is submitted - the correct order for this immediate-mode binding,
-    // so the hit-test lines up with what's actually drawn this frame. Wrapped in BeginGroup/
-    // EndGroup so the tile + its label below count as one item for the caller's SameLine() calls
-    // - without the group, the label's own cursor placement would break the grid's row alignment
-    // on the next tile. Only the drawn rect is scaled by the hover/press spring, never the
-    // InvisibleButton's own hitbox, so hovering can't grow the tile into its own hitbox and
-    // create a self-reinforcing flicker loop at the edge.
-    private static bool DrawHomeTile(string id, FontAwesomeIcon icon, string label, float tileSize)
+    // Icon centered above a centered label, both inside one square background - the root menu's
+    // shape (3 large role-choice squares) reads better this way than DrawHomeTile's landscape
+    // icon+label side by side, which is tuned for the narrower, denser Attending Venues grid.
+    // Same reserve/query/draw order and hover/press spring as DrawHomeTile.
+    private static bool DrawSquareTile(string id, FontAwesomeIcon icon, string label, float size)
     {
         ImGui.BeginGroup();
-        var clicked = ImGui.InvisibleButton($"##{id}", new Vector2(tileSize, tileSize));
+        var clicked = ImGui.InvisibleButton($"##{id}", new Vector2(size, size));
         var hovered = ImGui.IsItemHovered();
         var active = ImGui.IsItemActive();
         var min = ImGui.GetItemRectMin();
@@ -295,13 +290,121 @@ public partial class MainWindow : Window, IDisposable
         ImGui.PushFont(iconFont);
         var iconSize = ImGui.CalcTextSize(iconText, false, -1f);
         ImGui.PopFont();
-        var iconPos = new Vector2(center.X - iconSize.X / 2f, min.Y + tileSize * 0.28f);
+        var iconPos = new Vector2(center.X - iconSize.X / 2f, min.Y + size * 0.32f);
         drawList.AddText(iconFont, iconFont.FontSize, iconPos, ImGui.GetColorU32(AccentColor), iconText, 0f);
 
         var labelSize = ImGui.CalcTextSize(label, false, -1f);
-        ImGui.SetCursorScreenPos(new Vector2(min.X + (tileSize - labelSize.X) / 2f, max.Y + 4f));
-        ImGui.TextUnformatted(label);
+        var labelPos = new Vector2(center.X - labelSize.X / 2f, min.Y + size * 0.68f);
+        drawList.AddText(labelPos, ImGui.GetColorU32(ImGuiCol.Text), label);
+
         ImGui.EndGroup();
+        return clicked;
+    }
+
+    private void StartAttendingVenues() => page = Page.AttendingVenues;
+
+    private void DrawAttendingVenues()
+    {
+        if (DrawBackButton())
+        {
+            page = Page.Home;
+            return;
+        }
+
+        ImGui.Separator();
+        ImGui.Spacing();
+        DrawTitle("Attending Venues");
+        ImGui.Spacing();
+
+        // Wider landscape tiles (icon + label side by side inside one box) read better as 2
+        // columns than the old square grid's 3 - a 3rd column would either squeeze the label
+        // text or force the tiles narrower than they need to be to hold it comfortably.
+        const int columns = 2;
+        const float tileHeight = 48f;
+        var avail = ImGui.GetContentRegionAvail().X;
+        var spacing = ImGui.GetStyle().ItemSpacing.X;
+        var tileWidth = (avail - spacing * (columns - 1)) / columns;
+        var tileSize = new Vector2(tileWidth, tileHeight);
+
+        for (var i = 0; i < AttendingTiles.Length; i++)
+        {
+            var (id, icon, tileLabel) = AttendingTiles[i];
+            if (DrawHomeTile(id, icon, tileLabel, tileSize))
+            {
+                switch (id)
+                {
+                    case "hometile:vip": StartVipStatus(); break;
+                    case "hometile:events": StartEvents(); break;
+                    case "hometile:profiles": StartProfiles(); break;
+                    case "hometile:giveaways": StartGiveaways(); break;
+                    case "hometile:raffles": StartRaffles(); break;
+                }
+            }
+            if (i % columns != columns - 1 && i != AttendingTiles.Length - 1)
+                ImGui.SameLine();
+        }
+    }
+
+    private void StartWorkAtVenue() => page = Page.WorkAtVenue;
+
+    // Placeholder - no staff self-service screen exists in the plugin yet (only Discord's own
+    // /staffing-status does today). This just gives the new role-select menu somewhere to land
+    // for that option rather than leaving it unwired; the real screen is a separate, later round.
+    private void DrawWorkAtVenue()
+    {
+        if (DrawBackButton())
+        {
+            page = Page.Home;
+            return;
+        }
+
+        ImGui.Separator();
+        ImGui.Spacing();
+        DrawTitle("Work at a Venue");
+        ImGui.Spacing();
+        ImGui.TextWrapped("Staff self-service tools for the venues you work at are coming soon.");
+    }
+
+    // Reserve (InvisibleButton) -> query (IsItemHovered/Active, GetItemRectMin/Max) -> draw, all
+    // before any other widget is submitted - the correct order for this immediate-mode binding,
+    // so the hit-test lines up with what's actually drawn this frame. Icon and label are drawn
+    // together inside the same landscape rect (icon on the left, label to its right, both
+    // vertically centered) rather than the label sitting below a square icon box - no BeginGroup/
+    // EndGroup wrapper needed here since everything (background, icon, label) is drawn via the
+    // draw list against the one InvisibleButton's rect, not laid out as separate ImGui widgets.
+    // Only the drawn rect is scaled by the hover/press spring, never the InvisibleButton's own
+    // hitbox, so hovering can't grow the tile into its own hitbox and create a self-reinforcing
+    // flicker loop at the edge.
+    private static bool DrawHomeTile(string id, FontAwesomeIcon icon, string label, Vector2 size)
+    {
+        var clicked = ImGui.InvisibleButton($"##{id}", size);
+        var hovered = ImGui.IsItemHovered();
+        var active = ImGui.IsItemActive();
+        var min = ImGui.GetItemRectMin();
+        var max = ImGui.GetItemRectMax();
+
+        var target = active ? 0.94f : hovered ? 1.04f : 1f;
+        var scale = StepSpring(id, target, 0.1f);
+        var center = (min + max) / 2f;
+        var half = (max - min) / 2f * scale;
+
+        var bgColor = hovered ? Brighten(AccentColor) : WithAlpha(AccentColor, 0.15f);
+        var drawList = ImGui.GetWindowDrawList();
+        drawList.AddRectFilled(center - half, center + half, ImGui.GetColorU32(bgColor), 8f, ImDrawFlags.RoundCornersAll);
+
+        const float innerPadding = 12f;
+
+        var iconFont = Plugin.PluginInterface.UiBuilder.FontIcon;
+        var iconText = icon.ToIconString();
+        ImGui.PushFont(iconFont);
+        var iconSize = ImGui.CalcTextSize(iconText, false, -1f);
+        ImGui.PopFont();
+        var iconPos = new Vector2(min.X + innerPadding, center.Y - iconSize.Y / 2f);
+        drawList.AddText(iconFont, iconFont.FontSize, iconPos, ImGui.GetColorU32(AccentColor), iconText, 0f);
+
+        var labelSize = ImGui.CalcTextSize(label, false, -1f);
+        var labelPos = new Vector2(iconPos.X + iconSize.X + innerPadding, center.Y - labelSize.Y / 2f);
+        drawList.AddText(labelPos, ImGui.GetColorU32(ImGuiCol.Text), label);
 
         return clicked;
     }

@@ -86,6 +86,38 @@ public partial class MainWindow
                 DrawColored(testConnectionMessage ?? "Couldn't connect.", DangerColor);
                 break;
         }
+
+        // Only rendered while actually linked - Settings is reachable unlinked too (to fix a bad
+        // ApiBaseUrl before a first link), and there's nothing to forget in that state.
+        if (plugin.Configuration.AuthToken is not null)
+        {
+            ImGui.Spacing();
+            ImGui.Spacing();
+            ImGui.Separator();
+            ImGui.Spacing();
+
+            if (ColoredButton("Forget Me", DangerColor, FullWidthButton))
+            {
+                plugin.Configuration.AuthToken = null;
+                plugin.Configuration.LinkedDiscordUserId = null;
+                plugin.Configuration.LinkedDiscordUsername = null;
+                plugin.Configuration.Save();
+                plugin.ApiClient.SetAuthToken(null);
+
+                // Best-effort server-side revoke; RevokeAsync swallows its own exceptions, and
+                // local state above is already authoritative for the UI regardless of outcome.
+                _ = plugin.ApiClient.RevokeAsync();
+
+                // Page.Settings is checked before the AuthToken-null check in Draw(), so without
+                // this the player would stay stuck on Settings post-forget instead of landing on
+                // the unlinked/link-code screen - mirrors the Back button's own reset above.
+                page = Page.Home;
+                testConnectionState = VipLoadState.Idle;
+                testConnectionMessage = null;
+                saveMessage = null;
+                apiUrlError = null;
+            }
+        }
     }
 
     private void StartSettings()

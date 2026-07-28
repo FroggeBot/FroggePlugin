@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 using System.Threading.Tasks;
 using Dalamud.Bindings.ImGui;
 using FroggePlugin.Api;
@@ -31,7 +32,7 @@ public partial class MainWindow
     {
         if (DrawBackButton())
         {
-            page = Page.Home;
+            page = Page.AttendingVenues;
             vipLoadState = VipLoadState.Idle;
             vipMemberships = null;
             vipErrorMessage = null;
@@ -61,21 +62,43 @@ public partial class MainWindow
                 foreach (var membership in vipMemberships)
                 {
                     BeginCard();
+
+                    // Left: venue name/tier/expiry, in their own group so SameLine below can
+                    // jump to the card's right edge regardless of how tall this block ends up.
+                    ImGui.BeginGroup();
                     DrawTitle(membership.GuildName);
                     DrawBadge(membership.TierName, AccentColor);
-                    DrawColored(
-                        membership.ExpiresAt is { } expiresAt
-                            ? $"● Expires {expiresAt.LocalDateTime:d}"
-                            : "● Never expires",
-                        ExpiryColor(membership.ExpiresAt)
-                    );
-                    ImGui.Spacing();
+                    if (membership.ExpiresAt is { } expiresAt)
+                    {
+                        // Days-remaining is already computed inside ExpiryColor for its color
+                        // thresholds - surfacing the same number here too, since "8/26/2026"
+                        // alone takes a beat to translate into "is that soon?" at a glance.
+                        var daysRemaining = (expiresAt - DateTimeOffset.Now).TotalDays;
+                        var relative = daysRemaining >= 0
+                            ? $" ({Math.Ceiling(daysRemaining):0} day(s) left)"
+                            : " (expired)";
+                        DrawColored($"● Expires {expiresAt.LocalDateTime:d}{relative}", ExpiryColor(membership.ExpiresAt));
+                    }
+                    else
+                    {
+                        DrawColored("● Never expires", ExpiryColor(membership.ExpiresAt));
+                    }
+                    ImGui.EndGroup();
 
-                    if (ImGui.Button($"History##{membership.GuildId}"))
+                    // Right: History/Perks stacked in a column flush against the card's right
+                    // edge - cardContentWidth is measured from this same group's start point
+                    // (BeginCard captures it before Indent()/BeginGroup()), matching the exact
+                    // basis EndCard's own border math already uses, so this lines up with the
+                    // card's true right edge rather than guessing at window-relative coordinates.
+                    const float buttonWidth = 90f;
+                    ImGui.SameLine(cardContentWidth - buttonWidth);
+                    ImGui.BeginGroup();
+                    if (ColoredButton($"History##{membership.GuildId}", AccentColor, new Vector2(buttonWidth, 0)))
                         StartVipHistory(membership.GuildId, membership.GuildName);
-                    ImGui.SameLine();
-                    if (ImGui.Button($"Perks##{membership.GuildId}"))
+                    if (ColoredButton($"Perks##{membership.GuildId}", AccentColor, new Vector2(buttonWidth, 0)))
                         StartVipPerks(membership.GuildId, membership.GuildName);
+                    ImGui.EndGroup();
+
                     EndCard(AccentColor);
                 }
                 break;
