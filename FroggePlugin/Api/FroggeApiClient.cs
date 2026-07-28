@@ -36,7 +36,7 @@ public sealed record PluginShiftDetail(int Id, DateTimeOffset StartAt, DateTimeO
 
 public sealed record PluginPositionDetail(string PositionName, List<PluginShiftDetail> Shifts);
 
-public sealed record PluginEventDetail(int Id, ulong GuildId, string Name, string? Description, DateTimeOffset StartAt, DateTimeOffset? EndAt, string? ImageUrl, List<PluginPositionDetail> Positions);
+public sealed record PluginEventDetail(int Id, ulong GuildId, string Name, string? Description, DateTimeOffset StartAt, DateTimeOffset? EndAt, string? ImageUrl, string? Address, List<PluginPositionDetail> Positions);
 
 public sealed record PluginGuild(ulong GuildId, string GuildName, bool IsManager);
 

@@ -21,7 +21,7 @@ public partial class MainWindow
     {
         if (DrawBackButton())
         {
-            page = Page.Home;
+            page = Page.AttendingVenues;
             profilesLoadState = VipLoadState.Idle;
             profiles = null;
             profilesErrorMessage = null;

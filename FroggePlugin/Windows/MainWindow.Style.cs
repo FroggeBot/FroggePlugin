@@ -371,7 +371,7 @@ public partial class MainWindow
     {
         if (DrawBackButton())
         {
-            page = Page.Home;
+            page = Page.AttendingVenues;
             guildsLoadState = VipLoadState.Idle;
             guilds = null;
             guildsErrorMessage = null;
