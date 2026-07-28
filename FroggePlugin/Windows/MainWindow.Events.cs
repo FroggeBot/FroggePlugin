@@ -192,8 +192,7 @@ public partial class MainWindow
 
                 foreach (var position in eventDetail.Positions)
                 {
-                    ImGui.TextDisabled(position.PositionName);
-                    ImGui.Spacing();
+                    DrawSectionHeader(position.PositionName);
                     foreach (var shift in position.Shifts)
                     {
                         var fullyBooked = !shift.IsSignedUp && shift.SignupCount >= shift.Capacity;

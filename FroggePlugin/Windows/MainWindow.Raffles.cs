@@ -43,24 +43,11 @@ public partial class MainWindow
         DrawTitle(selectedRaffleGuildName);
         ImGui.Spacing();
 
-        if (ColoredButton("Open", showConcludedRaffles ? MutedColor : AccentColor))
+        DrawFilterTabs("Open", "Concluded", showConcludedRaffles, showSecond =>
         {
-            if (showConcludedRaffles)
-            {
-                showConcludedRaffles = false;
-                StartRaffleFetch();
-            }
-        }
-        ImGui.SameLine();
-        if (ColoredButton("Concluded", showConcludedRaffles ? AccentColor : MutedColor))
-        {
-            if (!showConcludedRaffles)
-            {
-                showConcludedRaffles = true;
-                StartRaffleFetch();
-            }
-        }
-        ImGui.Spacing();
+            showConcludedRaffles = showSecond;
+            StartRaffleFetch();
+        });
         ImGui.Spacing();
 
         switch (raffleListLoadState)

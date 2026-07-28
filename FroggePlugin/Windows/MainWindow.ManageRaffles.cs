@@ -42,24 +42,11 @@ public partial class MainWindow
         DrawTitle($"{selectedManageGuildName} - Raffles");
         ImGui.Spacing();
 
-        if (ColoredButton("Open", showConcludedManageRaffles ? MutedColor : AccentColor))
+        DrawFilterTabs("Open", "Concluded", showConcludedManageRaffles, showSecond =>
         {
-            if (showConcludedManageRaffles)
-            {
-                showConcludedManageRaffles = false;
-                StartManageRaffleFetch();
-            }
-        }
-        ImGui.SameLine();
-        if (ColoredButton("Concluded", showConcludedManageRaffles ? AccentColor : MutedColor))
-        {
-            if (!showConcludedManageRaffles)
-            {
-                showConcludedManageRaffles = true;
-                StartManageRaffleFetch();
-            }
-        }
-        ImGui.Spacing();
+            showConcludedManageRaffles = showSecond;
+            StartManageRaffleFetch();
+        });
         ImGui.Spacing();
 
         switch (manageRaffleListLoadState)
@@ -83,8 +70,8 @@ public partial class MainWindow
                 {
                     BeginCard();
                     DrawTitle(raffle.Name ?? "(unnamed raffle)");
-                    ImGui.TextDisabled($"Cost/Ticket: {raffle.CostPerTicket:N0} - Split: {raffle.WinnerPct}%");
-                    ImGui.TextDisabled($"{raffle.EntrantCount} entrant(s) - {raffle.TotalTickets} ticket(s)");
+                    ImGui.TextDisabled($"Cost/Ticket: {raffle.CostPerTicket:N0} · Split: {raffle.WinnerPct}%");
+                    ImGui.TextDisabled($"{raffle.EntrantCount} entrant(s) · {raffle.TotalTickets} ticket(s) in the pot");
                     ImGui.Spacing();
                     if (ImGui.Button($"Manage##{raffle.Id}"))
                         StartManageRaffleDetail(raffle);
@@ -149,7 +136,7 @@ public partial class MainWindow
                 ImGui.Spacing();
                 DrawSectionHeader("Winners");
                 foreach (var winnerId in raffle.WinnerIds)
-                    ImGui.TextWrapped(winnerId.ToString());
+                    DrawColored($"• {winnerId}", SuccessColor);
             }
         }
         EndCard(AccentColor);
@@ -254,7 +241,7 @@ public partial class MainWindow
 
         var resolving = resolveState == VipLoadState.Loading;
         ImGui.BeginDisabled(resolving);
-        if (ImGui.Button("Use Current Target"))
+        if (ColoredButton("Use Current Target", AccentColor))
             StartResolveRaffleTarget();
         ImGui.EndDisabled();
 
@@ -262,7 +249,7 @@ public partial class MainWindow
         switch (resolveState)
         {
             case VipLoadState.Loading:
-                ImGui.TextDisabled("Looking up...");
+                DrawLoading();
                 break;
 
             case VipLoadState.Error:

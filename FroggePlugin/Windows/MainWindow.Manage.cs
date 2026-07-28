@@ -254,7 +254,7 @@ public partial class MainWindow
                     StartRejectAction();
                 ImGui.EndDisabled();
 
-                EndCard(ApprovalStatusColor(p.ApprovalStatus));
+                EndCard(ApprovalStatusColor(p.ApprovalStatus), leftAccentStripe: true);
                 break;
         }
     }

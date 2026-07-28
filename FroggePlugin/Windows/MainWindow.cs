@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.Threading.Tasks;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface;
 using Dalamud.Interface.Windowing;
 using FroggePlugin.Api;
 
@@ -94,7 +95,7 @@ public partial class MainWindow : Window, IDisposable
         this.plugin = plugin;
     }
 
-    public void Dispose() { }
+    public void Dispose() => DisposeImageResources();
 
     public override void Draw()
     {
@@ -109,8 +110,9 @@ public partial class MainWindow : Window, IDisposable
             state = LinkState.Idle;
         }
 
-        DrawTitle("Frogge");
-        ImGui.Separator();
+        // Every sub-screen already draws its own Separator()+Spacing() right after its Back
+        // button - the native Dalamud window titlebar already reads "Frogge," so a second
+        // title+separator here would just duplicate it. This is only a small breathing-room gap.
         ImGui.Spacing();
 
         // Reachable regardless of link state - fixing a bad ApiBaseUrl is exactly the scenario
@@ -192,6 +194,21 @@ public partial class MainWindow : Window, IDisposable
         }
     }
 
+    // Static, server-driven menu - no drag/reorder, so a fixed grid is all that's needed here
+    // (unlike a genuine customizable-home-screen plugin, which would need real bin-packing/
+    // drag-state machinery for this same visual shape). See MainWindow.Motion.cs's attribution
+    // note - the icon-tile-grid concept was inspired by, not copied from, another plugin's home
+    // screen; this grid and DrawHomeTile below are an original implementation.
+    private static readonly (string Id, FontAwesomeIcon Icon, string Label)[] HomeTiles =
+    {
+        ("hometile:vip", FontAwesomeIcon.Crown, "VIP Status"),
+        ("hometile:events", FontAwesomeIcon.Calendar, "Events"),
+        ("hometile:profiles", FontAwesomeIcon.IdCard, "Profiles"),
+        ("hometile:giveaways", FontAwesomeIcon.Gift, "Giveaways"),
+        ("hometile:raffles", FontAwesomeIcon.Ticket, "Raffles"),
+        ("hometile:manage", FontAwesomeIcon.Cogs, "Manage"),
+    };
+
     private void DrawHome()
     {
         var label = plugin.Configuration.LinkedDiscordUsername
@@ -201,28 +218,29 @@ public partial class MainWindow : Window, IDisposable
         ImGui.Spacing();
         ImGui.Spacing();
 
-        if (ColoredButton("VIP Status", AccentColor, FullWidthButton))
-            StartVipStatus();
-        ImGui.Spacing();
+        const int columns = 3;
+        var avail = ImGui.GetContentRegionAvail().X;
+        var spacing = ImGui.GetStyle().ItemSpacing.X;
+        var tileSize = Math.Clamp((avail - spacing * (columns - 1)) / columns, 60f, 160f);
 
-        if (ColoredButton("Events", AccentColor, FullWidthButton))
-            StartEvents();
-        ImGui.Spacing();
-
-        if (ColoredButton("Profiles", AccentColor, FullWidthButton))
-            StartProfiles();
-        ImGui.Spacing();
-
-        if (ColoredButton("Giveaways", AccentColor, FullWidthButton))
-            StartGiveaways();
-        ImGui.Spacing();
-
-        if (ColoredButton("Raffles", AccentColor, FullWidthButton))
-            StartRaffles();
-        ImGui.Spacing();
-
-        if (ColoredButton("Manage", AccentColor, FullWidthButton))
-            StartManage();
+        for (var i = 0; i < HomeTiles.Length; i++)
+        {
+            var (id, icon, tileLabel) = HomeTiles[i];
+            if (DrawHomeTile(id, icon, tileLabel, tileSize))
+            {
+                switch (id)
+                {
+                    case "hometile:vip": StartVipStatus(); break;
+                    case "hometile:events": StartEvents(); break;
+                    case "hometile:profiles": StartProfiles(); break;
+                    case "hometile:giveaways": StartGiveaways(); break;
+                    case "hometile:raffles": StartRaffles(); break;
+                    case "hometile:manage": StartManage(); break;
+                }
+            }
+            if (i % columns != columns - 1 && i != HomeTiles.Length - 1)
+                ImGui.SameLine();
+        }
 
         ImGui.Spacing();
         ImGui.Separator();
@@ -244,6 +262,48 @@ public partial class MainWindow : Window, IDisposable
             // state above is already authoritative for the UI regardless of the outcome.
             _ = plugin.ApiClient.RevokeAsync();
         }
+    }
+
+    // Reserve (InvisibleButton) -> query (IsItemHovered/Active, GetItemRectMin/Max) -> draw, all
+    // before any other widget is submitted - the correct order for this immediate-mode binding,
+    // so the hit-test lines up with what's actually drawn this frame. Wrapped in BeginGroup/
+    // EndGroup so the tile + its label below count as one item for the caller's SameLine() calls
+    // - without the group, the label's own cursor placement would break the grid's row alignment
+    // on the next tile. Only the drawn rect is scaled by the hover/press spring, never the
+    // InvisibleButton's own hitbox, so hovering can't grow the tile into its own hitbox and
+    // create a self-reinforcing flicker loop at the edge.
+    private static bool DrawHomeTile(string id, FontAwesomeIcon icon, string label, float tileSize)
+    {
+        ImGui.BeginGroup();
+        var clicked = ImGui.InvisibleButton($"##{id}", new Vector2(tileSize, tileSize));
+        var hovered = ImGui.IsItemHovered();
+        var active = ImGui.IsItemActive();
+        var min = ImGui.GetItemRectMin();
+        var max = ImGui.GetItemRectMax();
+
+        var target = active ? 0.94f : hovered ? 1.04f : 1f;
+        var scale = StepSpring(id, target, 0.1f);
+        var center = (min + max) / 2f;
+        var half = (max - min) / 2f * scale;
+
+        var bgColor = hovered ? Brighten(AccentColor) : WithAlpha(AccentColor, 0.15f);
+        var drawList = ImGui.GetWindowDrawList();
+        drawList.AddRectFilled(center - half, center + half, ImGui.GetColorU32(bgColor), 8f, ImDrawFlags.RoundCornersAll);
+
+        var iconFont = Plugin.PluginInterface.UiBuilder.FontIcon;
+        var iconText = icon.ToIconString();
+        ImGui.PushFont(iconFont);
+        var iconSize = ImGui.CalcTextSize(iconText, false, -1f);
+        ImGui.PopFont();
+        var iconPos = new Vector2(center.X - iconSize.X / 2f, min.Y + tileSize * 0.28f);
+        drawList.AddText(iconFont, iconFont.FontSize, iconPos, ImGui.GetColorU32(AccentColor), iconText, 0f);
+
+        var labelSize = ImGui.CalcTextSize(label, false, -1f);
+        ImGui.SetCursorScreenPos(new Vector2(min.X + (tileSize - labelSize.X) / 2f, max.Y + 4f));
+        ImGui.TextUnformatted(label);
+        ImGui.EndGroup();
+
+        return clicked;
     }
 
     private void DrawUnlinked()
